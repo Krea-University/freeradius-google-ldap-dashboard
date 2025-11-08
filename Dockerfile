@@ -10,7 +10,6 @@ COPY configs/default /etc/freeradius/sites-available/default
 COPY configs/inner-tunnel /etc/freeradius/sites-available/inner-tunnel
 COPY configs/ldap /etc/freeradius/mods-available/ldap
 COPY configs/sql /etc/freeradius/mods-available/sql
-COPY configs/mysql-queries.conf /etc/freeradius/mods-available/mysql-queries.conf
 COPY configs/eap /etc/freeradius/mods-enabled/eap
 COPY configs/proxy.conf /etc/freeradius/proxy.conf
 COPY init.sh /usr/local/bin
