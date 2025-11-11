@@ -438,8 +438,20 @@ authorize {
 	# Example: [{"domain":"krea.edu.in","Type":"Staff","VLAN":"156"},{"domain":"krea.ac.in","Type":"Student","VLAN":"156"}]
 	
 	if (&request:Tmp-String-0) {
+		# Try cache first for fast authentication
+		ldap_cache {
+			ok = return
+		}
+		
+		# Cache miss - query SQL and LDAP
 		sql
 		ldap
+		
+		# Populate cache after successful LDAP lookup
+		if (ok || updated) {
+			ldap_cache
+		}
+		
 		if ((ok || updated) && User-Password && !control:Auth-Type) {
 			update control {
 				Auth-Type := ldap

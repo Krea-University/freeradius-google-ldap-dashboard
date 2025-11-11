@@ -1,0 +1,82 @@
+# -*- text -*-
+#
+#  $Id: cache configuration for LDAP credential caching $
+#
+#  This file provides caching configuration for LDAP authentication
+#  to improve performance and reduce LDAP server load
+#
+
+cache ldap_cache {
+	#  Driver to use for the cache
+	#  Options: rlm_cache_rbtree (memory), rlm_cache_memcached
+	driver = "rlm_cache_rbtree"
+
+	#  Key to use for the cache entries
+	#  We cache based on username
+	key = "%{User-Name}"
+
+	#  Time-to-live for cache entries (seconds)
+	#  Set from environment variable CACHE_TIMEOUT (default 300 = 5 minutes)
+	ttl = ENV_CACHE_TTL
+
+	#  Maximum number of entries in the cache
+	#  0 = unlimited (memory-based caching)
+	max_entries = 10000
+
+	#  Number of entries to pre-allocate
+	#  This improves performance by reducing memory allocation overhead
+	epoch = 0
+
+	#  Should we add the cache entry's TTL to the control list?
+	add_stats = no
+
+	#  The update section defines what gets cached
+	update {
+		#  Cache the LDAP User-DN for quick lookups
+		&control:LDAP-UserDn := &control:LDAP-UserDn
+		
+		#  Cache authentication type
+		&control:Auth-Type := &control:Auth-Type
+		
+		#  Cache user type (Staff/Student/Other)
+		&control:Tmp-String-1 := &control:Tmp-String-1
+		
+		#  Cache VLAN assignment
+		&reply:Tunnel-Type := &reply:Tunnel-Type
+		&reply:Tunnel-Medium-Type := &reply:Tunnel-Medium-Type
+		&reply:Tunnel-Private-Group-Id := &reply:Tunnel-Private-Group-Id
+	}
+}
+
+#
+#  Authentication result cache
+#  This caches successful authentications to reduce LDAP bind operations
+#
+cache auth_cache {
+	driver = "rlm_cache_rbtree"
+
+	#  Key includes username and a hash of the password
+	#  This ensures we don't accept stale passwords
+	key = "%{User-Name}:%{md5:%{User-Password}}"
+
+	#  Shorter TTL for auth cache (2 minutes by default)
+	#  This balances security and performance
+	ttl = 120
+
+	#  Maximum authentication cache entries
+	max_entries = 5000
+
+	epoch = 0
+	add_stats = yes
+
+	update {
+		#  Cache authentication success
+		&control:Auth-Type := &control:Auth-Type
+		&reply:Reply-Message := "Cached authentication"
+		
+		#  Cache VLAN info
+		&reply:Tunnel-Type := &reply:Tunnel-Type
+		&reply:Tunnel-Medium-Type := &reply:Tunnel-Medium-Type
+		&reply:Tunnel-Private-Group-Id := &reply:Tunnel-Private-Group-Id
+	}
+}

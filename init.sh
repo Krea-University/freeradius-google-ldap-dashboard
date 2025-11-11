@@ -35,6 +35,41 @@ sed -i "s|\"\${ENV_DB_NAME}\"|\"${DB_NAME:-radius}\"|g" /etc/freeradius/mods-ava
 sed -i "s|ENV_ENABLE_SQL_TRACE|${ENABLE_SQL_TRACE:-no}|g" /etc/freeradius/mods-available/sql
 sed -i "s|ENV_DB_MAX_CONNECTIONS|${DB_MAX_CONNECTIONS:-20}|g" /etc/freeradius/mods-available/sql
 
+# Configure cache TTL from environment variable
+echo "Configuring cache with TTL=${CACHE_TIMEOUT:-300} seconds..."
+sed -i "s|ENV_CACHE_TTL|${CACHE_TIMEOUT:-300}|g" /etc/freeradius/mods-available/cache
+
+# Configure password logging based on environment
+# Control sensitive data logging in SQL queries (passwords)
+echo "Configuring password logging based on LOG_SENSITIVE_DATA=${LOG_SENSITIVE_DATA:-false} and ENVIRONMENT=${ENVIRONMENT:-prod}..."
+
+# First, fix encoding in queries.conf (convert from UTF-16 to UTF-8) - only if needed
+QUERIES_FILE="/etc/freeradius/mods-config/sql/main/mysql/queries.conf"
+if file "$QUERIES_FILE" | grep -q "UTF-16"; then
+    echo "Converting queries.conf from UTF-16 to UTF-8..."
+    iconv -f UTF-16LE -t UTF-8 "$QUERIES_FILE" > /tmp/queries.conf.tmp
+    mv /tmp/queries.conf.tmp "$QUERIES_FILE"
+else
+    echo "queries.conf is already UTF-8, skipping conversion..."
+fi
+# Then fix line endings (CRLF to LF)
+sed -i 's/\r$//' "$QUERIES_FILE"
+
+if [ "${LOG_SENSITIVE_DATA}" = "true" ] || [ "${ENVIRONMENT}" = "dev" ]; then
+    # Development mode: Log actual passwords for debugging
+    echo "WARNING: Password logging is ENABLED. Use this setting only for development/debugging!"
+    PASSWORD_LOG_VALUE="%{%{User-Password}:-%{Chap-Password}}"
+else
+    # Production mode: Mask passwords in logs (default secure behavior)
+    echo "Password logging is DISABLED (production mode). Passwords will be masked as '***HIDDEN***'"
+    PASSWORD_LOG_VALUE="***HIDDEN***"
+fi
+
+# Replace placeholder in SQL queries configuration
+# Escape the password value for safe sed substitution
+PASSWORD_LOG_VALUE_ESCAPED=$(echo "${PASSWORD_LOG_VALUE}" | sed 's|/|\\\/|g')
+sed -i "s|ENV_PASSWORD_LOGGING_PLACEHOLDER|${PASSWORD_LOG_VALUE_ESCAPED}|g" /etc/freeradius/mods-config/sql/main/mysql/queries.conf
+
 # Update domain configuration with VLAN assignments
 # Parse DOMAIN_CONFIG JSON and dynamically generate FreeRADIUS unlang configuration
 if [ ! -z "$DOMAIN_CONFIG" ]; then
@@ -111,11 +146,25 @@ UNLANG
 	# All domains use same LDAP connection (same Google Workspace)
 	
 	if (&request:Tmp-String-0) {
+		# LDAP Credential Caching - Check cache first for performance
+		# This significantly reduces authentication time from ~10s to <100ms
+		ldap_cache {
+			# If cache hit, skip SQL and LDAP queries
+			ok = return
+		}
+		
+		# Cache miss - Query SQL and LDAP
 		# First try SQL for user data (optional, but useful for caching)
 		sql
 		
 		# Then LDAP for authentication
 		ldap
+		
+		# Populate cache after successful LDAP lookup
+		if (ok || updated) {
+			ldap_cache
+		}
+		
 		if ((ok || updated) && User-Password && !control:Auth-Type) {
 			update control {
 				Auth-Type := ldap

@@ -24,6 +24,7 @@ eap {
 	#  then that EAP type takes precedence over the
 	#  default type configured here.
 	#
+	#  Using TTLS for Google LDAP compatibility (LDAP bind with PAP)
 	default_eap_type = ttls
 
 	#  A list is maintained to correlate EAP-Response
@@ -761,11 +762,11 @@ eap {
 		#  The tunneled EAP session needs a default
 		#  EAP type which is separate from the one for
 		#  the non-tunneled EAP module.  Inside of the
-		#  PEAP tunnel, we recommend using MS-CHAPv2,
-		#  as that is the default type supported by
-		#  Windows clients.
+		#  PEAP tunnel, we use GTC for Google LDAP compatibility,
+		#  as Google LDAP doesn't expose NT-Password hashes required by MS-CHAPv2.
+		#  GTC sends password in plaintext inside the TLS tunnel for LDAP bind.
 		#
-		default_eap_type = mschapv2
+		default_eap_type = gtc
 
 		#  The PEAP module also has these configuration
 		#  items, which are the same as for TTLS.

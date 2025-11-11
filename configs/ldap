@@ -129,10 +129,14 @@ ldap {
 	#  Note: LDAP attribute names should be single quoted unless you want
 	#  the name value to be derived from an xlat expansion, or an
 	#  attribute ref.
+	#
+	#  For Google LDAP with PEAP-GTC: Don't map passwords
+	#  LDAP bind authentication will be used instead
+	#
 	update {
-		control:Password-With-Header	+= 'userPassword'
-		control:Cleartext-Password      := 'userPassword'
-		control:NT-Password		:= 'ntPassword'
+#		control:Password-With-Header	+= 'userPassword'
+#		control:Cleartext-Password      := 'userPassword'
+#		control:NT-Password		:= 'ntPassword'
 #		reply:Reply-Message		:= 'radiusReplyMessage'
 #		reply:Tunnel-Type		:= 'radiusTunnelType'
 #		reply:Tunnel-Medium-Type	:= 'radiusTunnelMediumType'

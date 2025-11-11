@@ -153,8 +153,28 @@ authorize {
 #	smbpasswd
 
 	#
+	#  LDAP Credential Caching for Performance
+	#  Check cache first before querying LDAP server
+	#  This significantly reduces authentication time and LDAP server load
+	#
+	ldap_cache {
+		# If cache hit (ok), skip LDAP lookup
+		ok = return
+	}
+
+	#
 	#  The ldap module reads passwords from the LDAP database.
+	#  Only called if cache miss
 	ldap
+	
+	#
+	#  Populate cache after successful LDAP lookup
+	#  This stores user info for quick access on next authentication
+	#
+	if (ok || updated) {
+		# Update the cache with fresh LDAP data
+		ldap_cache
+	}
 
 	#
 	#  Enforce daily limits on time spent logged in.
@@ -176,11 +196,15 @@ authorize {
 	#
 	pap
 
-	if (User-Password) {
-            update control {
-                Auth-Type := ldap
-            }
-        }
+	#
+	#  For Google LDAP: Use LDAP bind authentication
+	#  This is required because Google LDAP doesn't expose NT-Password
+	#
+	if (User-Password && !control:Auth-Type) {
+		update control {
+			Auth-Type := ldap
+		}
+	}
 }
 
 
@@ -237,20 +261,14 @@ authenticate {
 	#  Pluggable Authentication Modules.
 #	pam
 
-	# Uncomment it if you want to use ldap for authentication
 	#
-	# Note that this means "check plain-text password against
-	# the ldap database", which means that EAP won't work,
-	# as it does not supply a plain-text password.
+	#  For Google LDAP: Use LDAP bind authentication
+	#  This is required for PEAP-MSCHAPv2 since Google LDAP
+	#  doesn't expose NT-Password hashes
 	#
-	#  We do NOT recommend using this.  LDAP servers are databases.
-	#  They are NOT authentication servers.  FreeRADIUS is an
-	#  authentication server, and knows what to do with authentication.
-	#  LDAP servers do not.
-	#
-#	Auth-Type LDAP {
+	Auth-Type LDAP {
 		ldap
-#	}
+	}
 
 	#
 	#  Allow EAP authentication.
