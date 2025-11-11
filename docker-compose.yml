@@ -5,6 +5,15 @@ services:
       context: .
     container_name: freeradius-google-ldap
     env_file: .env
+    # Resource limits for 500-1000 concurrent sessions
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 2G
+        reservations:
+          cpus: '2.0'
+          memory: 1G
     environment:
       - LDAP_SERVER=${LDAP_SERVER}
       - LDAP_IDENTITY=${LDAP_IDENTITY}
@@ -44,6 +53,15 @@ services:
     image: mysql:8.0
     container_name: radius-mysql
     env_file: .env
+    # Resource limits for high-performance database
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 3G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
     environment:
       - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
       - MYSQL_DATABASE=${DB_NAME}
@@ -56,8 +74,23 @@ services:
       - mysql_data:/var/lib/mysql
       - ./sql:/docker-entrypoint-initdb.d:ro
       - ./mysql-conf:/etc/mysql/conf.d:ro
-    # MySQL server configuration with timezone offset from environment variable
-    command: --default-authentication-plugin=mysql_native_password --default-time-zone='${MYSQL_TIMEZONE_OFFSET}'
+    # MySQL server configuration with timezone offset and performance tuning
+    command: >
+      --default-authentication-plugin=mysql_native_password 
+      --default-time-zone='${MYSQL_TIMEZONE_OFFSET}'
+      --max-connections=500
+      --innodb-buffer-pool-size=1G
+      --innodb-log-file-size=256M
+      --innodb-flush-log-at-trx-commit=2
+      --innodb-write-io-threads=16
+      --innodb-read-io-threads=16
+      --innodb-io-capacity=4000
+      --innodb-buffer-pool-instances=8
+      --skip-name-resolve
+      --skip-log-bin
+      --performance-schema=OFF
+      --table-open-cache=4000
+      --thread-cache-size=100
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
@@ -88,6 +121,7 @@ services:
       - FORCE_PASSWORD_CHANGE=${FORCE_PASSWORD_CHANGE}
       - ADMIN_SESSION_TIMEOUT=${ADMIN_SESSION_TIMEOUT}
       - BCRYPT_ROUNDS=${BCRYPT_ROUNDS}
+      - DOMAIN_CONFIG=${DOMAIN_CONFIG}
     ports:
       - "${DASHBOARD_PORT}:80"
     depends_on:

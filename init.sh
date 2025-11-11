@@ -36,15 +36,158 @@ sed -i "s|ENV_ENABLE_SQL_TRACE|${ENABLE_SQL_TRACE:-no}|g" /etc/freeradius/mods-a
 sed -i "s|ENV_DB_MAX_CONNECTIONS|${DB_MAX_CONNECTIONS:-20}|g" /etc/freeradius/mods-available/sql
 
 # Update domain configuration with VLAN assignments
-# Parse DOMAIN_CONFIG JSON and update configuration files
+# Parse DOMAIN_CONFIG JSON and dynamically generate FreeRADIUS unlang configuration
 if [ ! -z "$DOMAIN_CONFIG" ]; then
     echo "Updating domain configuration with VLAN assignments..."
-    # Log the domain configuration for debugging
     echo "Domain Config: $DOMAIN_CONFIG"
     
-    # Extract domain names for validation
-    DOMAINS=$(echo "$DOMAIN_CONFIG" | grep -o '"domain":"[^"]*"' | cut -d'"' -f4 | tr '\n' ',' | sed 's/,$//')
+    # Generate dynamic domain configuration file
+    cat > /etc/freeradius/mods-config/files/dynamic-domains << 'EOFCONFIG'
+# Dynamically generated domain configuration
+# This file is auto-generated from DOMAIN_CONFIG environment variable
+# DO NOT EDIT MANUALLY - Changes will be overwritten on container restart
+
+EOFCONFIG
+
+    # Parse JSON and generate unlang configuration using grep/sed
+    # Extract domains and create domain_config.conf
+    echo "# Domain to VLAN and Type mappings" > /tmp/domain_config.conf
+    echo "$DOMAIN_CONFIG" | grep -o '"domain":"[^"]*","Type":"[^"]*","VLAN":"[^"]*"' | while read entry; do
+        domain=$(echo "$entry" | sed 's/.*"domain":"\([^"]*\)".*/\1/')
+        user_type=$(echo "$entry" | sed 's/.*"Type":"\([^"]*\)".*/\1/')
+        vlan=$(echo "$entry" | sed 's/.*"VLAN":"\([^"]*\)".*/\1/')
+        echo "$domain|$vlan|$user_type" >> /tmp/domain_config.conf
+    done
+    
+    # Extract and display supported domains
+    DOMAINS=$(echo "$DOMAIN_CONFIG" | grep -o '"domain":"[^"]*"' | sed 's/"domain":"\([^"]*\)"/\1/g' | tr '\n' ', ' | sed 's/,$//')
     echo "Supported domains: $DOMAINS"
+    
+    domain_count=$(grep -c '|' /tmp/domain_config.conf 2>/dev/null || echo "0")
+    echo "Generated configuration for $domain_count domains"
+    
+    if [ $? -eq 0 ]; then
+        # Move the generated config to FreeRADIUS config directory
+        mv /tmp/domain_config.conf /etc/freeradius/mods-config/files/domain_mappings.conf
+        
+        # Generate dynamic unlang configuration for VLAN assignment using bash
+        > /tmp/dynamic_vlan.conf  # Clear file
+        first_entry=true
+        
+        echo "$DOMAIN_CONFIG" | grep -o '"domain":"[^"]*","Type":"[^"]*","VLAN":"[^"]*"' | while read entry; do
+            domain=$(echo "$entry" | sed 's/.*"domain":"\([^"]*\)".*/\1/')
+            user_type=$(echo "$entry" | sed 's/.*"Type":"\([^"]*\)".*/\1/')
+            vlan=$(echo "$entry" | sed 's/.*"VLAN":"\([^"]*\)".*/\1/')
+            
+            if [ "$first_entry" = true ]; then
+                keyword="if"
+                first_entry=false
+            else
+                keyword="elsif"
+            fi
+            
+            cat >> /tmp/dynamic_vlan.conf << UNLANG
+		# $domain = $user_type, VLAN $vlan
+		$keyword (&request:Tmp-String-0 == "$domain") {
+			update control {
+				Tmp-String-1 := "$user_type"
+			}
+			update reply {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := "$vlan"
+			}
+		}
+UNLANG
+        done
+
+        if [ $? -eq 0 ]; then
+            # Insert dynamic VLAN configuration into default site config
+            # This replaces the hardcoded domain checks with dynamic ones
+            cat > /tmp/authorize_section.conf << 'EOF'
+	
+	# Multi-domain support with dynamic VLAN assignments
+	# Configuration loaded from DOMAIN_CONFIG environment variable
+	# All domains use same LDAP connection (same Google Workspace)
+	
+	if (&request:Tmp-String-0) {
+		# First try SQL for user data (optional, but useful for caching)
+		sql
+		
+		# Then LDAP for authentication
+		ldap
+		if ((ok || updated) && User-Password && !control:Auth-Type) {
+			update control {
+				Auth-Type := ldap
+				# For Google LDAP, bind using email address instead of DN
+				LDAP-UserDn := "%{User-Name}"
+			}
+			
+			# Dynamic VLAN assignment based on domain
+EOF
+            cat /tmp/dynamic_vlan.conf >> /tmp/authorize_section.conf
+            cat >> /tmp/authorize_section.conf << 'EOF'
+			else {
+				# Domain not in configuration, reject
+				update control {
+					Auth-Type := Reject
+				}
+				update reply {
+					Reply-Message := "Domain not supported"
+				}
+			}
+		}
+	}
+	else {
+		# Reject users from unsupported domains or invalid format
+		update control {
+			Auth-Type := Reject
+		}
+		update reply {
+			Reply-Message := "Invalid username format or domain not supported"
+		}
+	}
+EOF
+            
+            # Backup original config
+            cp /etc/freeradius/sites-available/default /etc/freeradius/sites-available/default.backup
+            
+            # Replace the dynamic section in the default config
+            # Using awk to replace content between markers
+            awk -v new_config="$(cat /tmp/authorize_section.conf)" '
+            BEGIN { skip=0; replaced=0 }
+            /# --- BEGIN DYNAMIC DOMAIN CONFIG ---/ { 
+                print
+                skip=1
+                next 
+            }
+            /# --- END DYNAMIC DOMAIN CONFIG ---/ { 
+                if (skip && !replaced) {
+                    print new_config
+                    replaced=1
+                }
+                skip=0
+                print
+                next
+            }
+            !skip { print }
+            ' /etc/freeradius/sites-available/default > /tmp/default.new
+            
+            # Replace the original with the new configuration
+            if [ -s /tmp/default.new ]; then
+                mv /tmp/default.new /etc/freeradius/sites-available/default
+                echo "Dynamic domain VLAN configuration applied to FreeRADIUS"
+            else
+                echo "Error: Generated configuration file is empty, keeping original"
+            fi
+        else
+            echo "Failed to generate dynamic VLAN configuration"
+        fi
+        
+        echo "Domain configuration updated successfully"
+    else
+        echo "Failed to parse DOMAIN_CONFIG, using default configuration"
+    fi
 fi
 
 # add support to second level like: .com.br, .com.ar

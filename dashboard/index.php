@@ -4,6 +4,53 @@ requireLogin();
 
 // Use PDO connection from auth.php
 // $pdo is already available from auth.php
+
+// Parse DOMAIN_CONFIG from environment variable
+function getDomainConfig() {
+    $domainConfigJson = getenv('DOMAIN_CONFIG');
+    if (!$domainConfigJson) {
+        // Fallback to default if not set
+        return [
+            ['domain' => 'krea.edu.in', 'Type' => 'Staff', 'VLAN' => '156'],
+            ['domain' => 'krea.ac.in', 'Type' => 'Student', 'VLAN' => '156'],
+            ['domain' => 'ifmr.ac.in', 'Type' => 'Other Center', 'VLAN' => '156']
+        ];
+    }
+    
+    $config = json_decode($domainConfigJson, true);
+    return $config ?: [];
+}
+
+// Create domain to role mapping
+function getDomainRoleMap() {
+    $domains = getDomainConfig();
+    $map = [];
+    foreach ($domains as $domain) {
+        $map[$domain['domain']] = $domain['Type'];
+    }
+    return $map;
+}
+
+// Generate SQL CASE statement for role determination
+function generateRoleCaseStatement() {
+    $domains = getDomainConfig();
+    if (empty($domains)) {
+        return "'Other'";
+    }
+    
+    $caseStatement = "CASE ";
+    foreach ($domains as $domain) {
+        $domainEscaped = addslashes($domain['domain']);
+        $typeEscaped = addslashes($domain['Type']);
+        $caseStatement .= "WHEN SUBSTRING_INDEX(username, '@', -1) = '{$domainEscaped}' THEN '{$typeEscaped}' ";
+    }
+    $caseStatement .= "ELSE 'Other' END";
+    
+    return $caseStatement;
+}
+
+$domainRoleMap = getDomainRoleMap();
+$roleCaseStatement = generateRoleCaseStatement();
 ?>
 
 <!DOCTYPE html>
@@ -161,14 +208,11 @@ requireLogin();
                                 </thead>
                                 <tbody>
                                     <?php
-                                    $stmt = $pdo->query("
+                                    // Use dynamic role case statement
+                                    $query = "
                                         SELECT 
                                             SUBSTRING_INDEX(username, '@', -1) as domain,
-                                            CASE 
-                                                WHEN SUBSTRING_INDEX(username, '@', -1) IN ('krea.edu.in', 'ifmr.ac.in') THEN 'Staff'
-                                                WHEN SUBSTRING_INDEX(username, '@', -1) = 'krea.ac.in' THEN 'Student'
-                                                ELSE 'Other'
-                                            END as role,
+                                            {$roleCaseStatement} as role,
                                             COUNT(CASE WHEN acctstoptime IS NULL THEN 1 END) as active_sessions,
                                             COUNT(*) as total_sessions,
                                             ROUND(
@@ -180,13 +224,26 @@ requireLogin();
                                         WHERE acctstarttime >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
                                         GROUP BY domain, role
                                         ORDER BY total_sessions DESC
-                                    ");
+                                    ";
+                                    
+                                    $stmt = $pdo->query($query);
 
                                     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                                         $data_mb = round($row['total_bytes'] / (1024 * 1024), 2);
+                                        
+                                        // Dynamic badge color based on role type
+                                        $roleBadgeClass = 'bg-info'; // default
+                                        if (stripos($row['role'], 'staff') !== false || stripos($row['role'], 'faculty') !== false) {
+                                            $roleBadgeClass = 'bg-success';
+                                        } elseif (stripos($row['role'], 'student') !== false) {
+                                            $roleBadgeClass = 'bg-primary';
+                                        } elseif (stripos($row['role'], 'admin') !== false) {
+                                            $roleBadgeClass = 'bg-danger';
+                                        }
+                                        
                                         echo "<tr>";
                                         echo "<td><span class='badge bg-primary'>{$row['domain']}</span></td>";
-                                        echo "<td><span class='badge " . ($row['role'] == 'Staff' ? 'bg-success' : 'bg-info') . "'>{$row['role']}</span></td>";
+                                        echo "<td><span class='badge {$roleBadgeClass}'>{$row['role']}</span></td>";
                                         echo "<td>{$row['active_sessions']}</td>";
                                         echo "<td>{$row['total_sessions']}</td>";
                                         echo "<td>{$row['success_rate']}%</td>";

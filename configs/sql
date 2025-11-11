@@ -24,7 +24,11 @@ sql {
 	connect_failure_retry_delay = 60
 	lifetime = 0
 	max_queries = 0
-	idle_timeout = 60
+	idle_timeout = 300
+	
+	# Performance optimizations
+	# Use connection pooling efficiently
+	logfile = ${logdir}/sqllog.sql
 	
 	# Enable SQL tracing for debugging (controlled by environment variable)
 	sqltrace = ENV_ENABLE_SQL_TRACE

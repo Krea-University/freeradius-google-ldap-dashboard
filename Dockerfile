@@ -13,7 +13,8 @@ COPY configs/sql /etc/freeradius/mods-available/sql
 COPY configs/eap /etc/freeradius/mods-enabled/eap
 COPY configs/proxy.conf /etc/freeradius/proxy.conf
 COPY init.sh /usr/local/bin
-RUN chmod +x /usr/local/bin/init.sh
+RUN chmod +x /usr/local/bin/init.sh && \
+    sed -i 's/\r$//' /usr/local/bin/init.sh
 RUN ln -s /etc/freeradius/mods-available/ldap /etc/freeradius/mods-enabled/ldap
 RUN ln -s /etc/freeradius/mods-available/sql /etc/freeradius/mods-enabled/sql
 

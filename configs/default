@@ -428,67 +428,36 @@ authorize {
 		}
 	}
 	
-	# Multi-domain support with VLAN assignments
-	# Configuration: [{"domain":"krea.edu.in","Type":"Staff","VLAN":"1"},{"domain":"krea.ac.in","Type":"Student","VLAN":"5"},{"domain":"ifmr.ac.in","Type":"Other Center","VLAN":"10"}]
-	# All domains use same LDAP connection (same Google Workspace)
-	if ((&request:Tmp-String-0 == "krea.edu.in") || (&request:Tmp-String-0 == "krea.ac.in") || (&request:Tmp-String-0 == "ifmr.ac.in")) {
-		# First try SQL for user data (optional, but useful for caching)
+	# DYNAMIC CONFIGURATION SECTION
+	# This section will be automatically replaced by init.sh based on DOMAIN_CONFIG environment variable
+	# DO NOT MANUALLY EDIT BETWEEN THESE MARKERS
+	# --- BEGIN DYNAMIC DOMAIN CONFIG ---
+	
+	# Multi-domain support with VLAN assignments (dynamically generated)
+	# This configuration is generated from DOMAIN_CONFIG environment variable
+	# Example: [{"domain":"krea.edu.in","Type":"Staff","VLAN":"156"},{"domain":"krea.ac.in","Type":"Student","VLAN":"156"}]
+	
+	if (&request:Tmp-String-0) {
 		sql
-		
-		# Then LDAP for authentication
 		ldap
 		if ((ok || updated) && User-Password && !control:Auth-Type) {
 			update control {
 				Auth-Type := ldap
-				# For Google LDAP, bind using email address instead of DN
 				LDAP-UserDn := "%{User-Name}"
 			}
-			
-			# Set user role and VLAN based on domain
-			# krea.edu.in = Staff, VLAN 1
-			if (&request:Tmp-String-0 == "krea.edu.in") {
-				update control {
-					Tmp-String-1 := "Staff"
-				}
-				update reply {
-					Tunnel-Type := VLAN
-					Tunnel-Medium-Type := IEEE-802
-					Tunnel-Private-Group-Id := "1"
-				}
-			}
-			# krea.ac.in = Student, VLAN 5
-			elsif (&request:Tmp-String-0 == "krea.ac.in") {
-				update control {
-					Tmp-String-1 := "Student"
-				}
-				update reply {
-					Tunnel-Type := VLAN
-					Tunnel-Medium-Type := IEEE-802
-					Tunnel-Private-Group-Id := "5"
-				}
-			}
-			# ifmr.ac.in = Other Center, VLAN 10
-			elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
-				update control {
-					Tmp-String-1 := "Other Center"
-				}
-				update reply {
-					Tunnel-Type := VLAN
-					Tunnel-Medium-Type := IEEE-802
-					Tunnel-Private-Group-Id := "10"
-				}
-			}
+			# Domain-specific VLAN assignments will be inserted here by init.sh
 		}
 	}
 	else {
-		# Reject users from unsupported domains
 		update control {
 			Auth-Type := Reject
 		}
 		update reply {
-			Reply-Message := "Domain not supported. Supported domains: krea.edu.in (Staff), krea.ac.in (Student), ifmr.ac.in (Other Center)"
+			Reply-Message := "Invalid username format or domain not supported"
 		}
 	}
+	
+	# --- END DYNAMIC DOMAIN CONFIG ---
 
 
 	#
@@ -811,29 +780,19 @@ post-auth {
 	}
 	
 	#  Add role-based attributes to the reply
-	#  Based on the role set during authorization
+	#  Based on the role set during authorization (dynamically set from DOMAIN_CONFIG)
 	if (&control:Tmp-String-1) {
 		update reply {
-			# Add role-specific Reply-Message
+			# Add role-specific Reply-Message with user type from domain config
 			Reply-Message := "Authenticated as %{control:Tmp-String-1}"
+			# Set Class attribute to the user type (uppercased)
+			Class := "%{control:Tmp-String-1}"
 		}
 		
-		# Set different attributes based on role
-		if (&control:Tmp-String-1 == "staff") {
-			update reply {
-				# Staff-specific attributes
-				Class := "STAFF"
-				Session-Timeout := 43200  # 12 hours
-				Idle-Timeout := 3600      # 1 hour
-			}
-		}
-		elsif (&control:Tmp-String-1 == "student") {
-			update reply {
-				# Student-specific attributes  
-				Class := "STUDENT"
-				Session-Timeout := 28800  # 8 hours
-				Idle-Timeout := 1800      # 30 minutes
-			}
+		# Default session timeouts (can be customized per domain type in future)
+		update reply {
+			Session-Timeout := 28800  # 8 hours default
+			Idle-Timeout := 1800      # 30 minutes default
 		}
 	}
 
