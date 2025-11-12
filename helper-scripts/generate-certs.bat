@@ -22,17 +22,17 @@ if "%STATE%"=="" set STATE=California
 set /p CITY="City [San Francisco]: "
 if "%CITY%"=="" set CITY=San Francisco
 
-set /p ORG="Organization Name [KREA University]: "
-if "%ORG%"=="" set ORG=KREA University
+set /p ORG="Organization Name [Your Organization]: "
+if "%ORG%"=="" set ORG=Your Organization
 
-set /p CA_CN="Common Name for CA [KREA Certificate Authority]: "
-if "%CA_CN%"=="" set CA_CN=KREA Certificate Authority
+set /p CA_CN="Common Name for CA [Your Organization Certificate Authority]: "
+if "%CA_CN%"=="" set CA_CN=Your Organization Certificate Authority
 
-set /p SERVER_CN="Common Name for Server [radius.krea.edu.in]: "
-if "%SERVER_CN%"=="" set SERVER_CN=radius.krea.edu.in
+set /p SERVER_CN="Common Name for Server [radius.yourdomain.com]: "
+if "%SERVER_CN%"=="" set SERVER_CN=radius.yourdomain.com
 
-set /p EMAIL="Email Address [admin@krea.edu.in]: "
-if "%EMAIL%"=="" set EMAIL=admin@krea.edu.in
+set /p EMAIL="Email Address [admin@yourdomain.com]: "
+if "%EMAIL%"=="" set EMAIL=admin@yourdomain.com
 
 set /p VALIDITY="Certificate Validity (days) [3650]: "
 if "%VALIDITY%"=="" set VALIDITY=3650

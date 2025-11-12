@@ -435,7 +435,7 @@ authorize {
 	
 	# Multi-domain support with VLAN assignments (dynamically generated)
 	# This configuration is generated from DOMAIN_CONFIG environment variable
-	# Example: [{"domain":"krea.edu.in","Type":"Staff","VLAN":"156"},{"domain":"krea.ac.in","Type":"Student","VLAN":"156"}]
+	# Example: [{"domain":"staff.yourdomain.com","Type":"Staff","VLAN":"10"},{"domain":"students.yourdomain.com","Type":"Student","VLAN":"20"}]
 	
 	if (&request:Tmp-String-0) {
 		# Try cache first for fast authentication
@@ -681,6 +681,11 @@ accounting {
 	#  Log accounting data to SQL database
 	sql
 	
+	# --- BEGIN FIREWALL ACCOUNTING REPLICATION ---
+	# Replicate accounting packets to firewall/external RADIUS server
+	# This section is dynamically managed by init.sh based on ENABLE_ACCT_REPLICATION
+	# --- END FIREWALL ACCOUNTING REPLICATION ---
+	
 	#
 	#  Create a 'detail'ed log of the packets.
 	#  Note that accounting requests which are proxied
@@ -812,7 +817,11 @@ post-auth {
 #	main_pool
 
 	#  Log successful authentications to SQL
-	sql
+	#  Skip logging for tunneled EAP (TTLS/PEAP) as inner-tunnel already logged it
+	#  This prevents duplicate entries in radpostauth table
+	if (!&session-state:TLS-Session-Cipher-Suite) {
+		sql
+	}
 
 	#  Create the CUI value and add the attribute to Access-Accept.
 	#  Uncomment the line below if *returning* the CUI.
@@ -929,7 +938,53 @@ post-auth {
 	#
 	Post-Auth-Type REJECT {
 		# log failed authentications in SQL, too.
-		sql
+		# Skip logging for tunneled EAP (TTLS/PEAP) as inner-tunnel already logged it
+		if (!&session-state:TLS-Session-Cipher-Suite) {
+			sql
+		}
+		
+		#
+		# Send helpful error messages to WiFi clients
+		# This helps users understand WHY authentication failed
+		#
+		
+		# Check if it's an LDAP authentication failure (wrong password/username)
+		if (&Module-Failure-Message =~ /bind as user failed/) {
+			update reply {
+				Reply-Message := "Authentication failed: Invalid username or password. Please check your credentials and try again."
+			}
+		}
+		# Check if user account doesn't exist
+		elsif (&Module-Failure-Message =~ /User not found/) {
+			update reply {
+				Reply-Message := "Authentication failed: User account not found. Please contact IT support."
+			}
+		}
+		# Check if LDAP server is unreachable
+		elsif (&Module-Failure-Message =~ /LDAP connection failed|timed out/) {
+			update reply {
+				Reply-Message := "Authentication failed: Unable to reach authentication server. Please try again later."
+			}
+		}
+		# Check for certificate issues (EAP-TLS/PEAP)
+		elsif (&Module-Failure-Message =~ /certificate|TLS/) {
+			update reply {
+				Reply-Message := "Authentication failed: Certificate error. Please check your device security settings."
+			}
+		}
+		# Check if domain/realm is not supported
+		elsif (&Module-Failure-Message =~ /Domain not supported|Invalid username format/) {
+			update reply {
+				Reply-Message := "Authentication failed: Email domain not supported. Use your institutional email address."
+			}
+		}
+		# Generic failure message
+		else {
+			update reply {
+				Reply-Message := "Authentication failed: Invalid credentials. Please verify your username and password."
+			}
+		}
+		
 		attr_filter.access_reject
 
 		# Insert EAP-Failure message if the request was
@@ -960,6 +1015,17 @@ post-auth {
 #  Only a few modules currently have this method.
 #
 pre-proxy {
+	#
+	# Restore full email address for firewall accounting replication
+	# The suffix module strips domain from User-Name (creates Stripped-User-Name)
+	# But firewalls need full email (user@domain.com) for User-ID mapping
+	#
+	if (&Stripped-User-Name && &Realm && (&control:Proxy-To-Realm == "firewall_accounting")) {
+		update proxy-request {
+			User-Name := "%{Stripped-User-Name}@%{Realm}"
+		}
+	}
+	
 	# Before proxing the request add an Operator-Name attribute identifying
 	# if the operator-name is found for this client.
 	# No need to uncomment this if you have already enabled this in

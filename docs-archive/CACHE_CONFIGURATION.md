@@ -156,14 +156,14 @@ docker logs -f freeradius-google-ldap
 
 **Cache HIT (Fast):**
 ```
-(0) ldap_cache: User-Name = "user@krea.edu.in"
+(0) ldap_cache: User-Name = "user@yourdomain.com"
 (0) ldap_cache: Cache entry found
 (0) ldap_cache: Setting Auth-Type = ldap
 ```
 
 **Cache MISS (Slower - First Time):**
 ```
-(0) ldap_cache: User-Name = "user@krea.edu.in"
+(0) ldap_cache: User-Name = "user@yourdomain.com"
 (0) ldap_cache: No cache entry found
 (0) ldap: Performing search...
 (0) ldap: Search returned 1 result
@@ -321,7 +321,7 @@ cache student_cache {
 ```powershell
 # Time authentication with cache miss
 Measure-Command {
-    docker exec freeradius-google-ldap radtest user@krea.edu.in password localhost 0 testing123
+    docker exec freeradius-google-ldap radtest user@yourdomain.com password localhost 0 testing123
 }
 # Expected: ~10 seconds
 ```
@@ -330,7 +330,7 @@ Measure-Command {
 ```powershell
 # Time authentication with cache hit
 Measure-Command {
-    docker exec freeradius-google-ldap radtest user@krea.edu.in password localhost 0 testing123
+    docker exec freeradius-google-ldap radtest user@yourdomain.com password localhost 0 testing123
 }
 # Expected: <1 second
 ```

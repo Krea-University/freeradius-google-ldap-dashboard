@@ -20,8 +20,17 @@ sed -i "s|ENV_RADIUS_SECRET|${SHARED_SECRET:-${RADIUS_SECRET:-testing123}}|g" /e
 sed -i "s|BASE_DOMAIN|$BASE_DOMAIN|g" /etc/freeradius/proxy.conf
 sed -i "s|DOMAIN_EXTENSION|$DOMAIN_EXTENSION|g" /etc/freeradius/proxy.conf
 
+# Configure firewall accounting replication
+sed -i "s|ENV_FIREWALL_ACCT_SERVER|${FIREWALL_ACCT_SERVER:-10.10.10.1}|g" /etc/freeradius/proxy.conf
+sed -i "s|ENV_FIREWALL_ACCT_PORT|${FIREWALL_ACCT_PORT:-1813}|g" /etc/freeradius/proxy.conf
+sed -i "s|ENV_FIREWALL_ACCT_SECRET|${FIREWALL_ACCT_SECRET:-testing123}|g" /etc/freeradius/proxy.conf
+
 # sed -i "s|GOOGLE_LDAP_PASSWORD|$GOOGLE_LDAP_PASSWORD|g" /etc/freeradius/mods-available/ldap
 # sed -i "s|GOOGLE_LDAP_USERNAME|$GOOGLE_LDAP_USERNAME|g" /etc/freeradius/mods-available/ldap
+
+# Replace LDAP credentials from environment variables
+sed -i "s|LDAP_IDENTITY_PLACEHOLDER|${LDAP_IDENTITY}|g" /etc/freeradius/mods-available/ldap
+sed -i "s|LDAP_PASSWORD_PLACEHOLDER|${LDAP_PASSWORD}|g" /etc/freeradius/mods-available/ldap
 
 sed -i "s|GOOGLE_LDAPTLS_CERT|$GOOGLE_LDAPTLS_CERT|g" /etc/freeradius/mods-available/ldap
 sed -i "s|GOOGLE_LDAPTLS_KEY|$GOOGLE_LDAPTLS_KEY|g" /etc/freeradius/mods-available/ldap
@@ -239,6 +248,64 @@ EOF
     fi
 fi
 
+# Configure firewall accounting packet replication
+echo "Configuring accounting packet replication: ENABLE_ACCT_REPLICATION=${ENABLE_ACCT_REPLICATION:-false}"
+if [ "${ENABLE_ACCT_REPLICATION}" = "true" ]; then
+    echo "Enabling accounting packet replication to firewall: ${FIREWALL_ACCT_SERVER}:${FIREWALL_ACCT_PORT}"
+    
+    # Create accounting replication configuration
+    # WARNING: If firewall doesn't respond, accounting will fail for clients!
+    # Firewall must be configured at 10.10.10.1:1813 with secret: testing123
+    cat > /tmp/acct_replication.conf << 'EOF'
+	#
+	# Firewall accounting replication ENABLED
+	#
+	# How it works:
+	# 1. FreeRADIUS receives accounting packet from client (AP/NAS)
+	# 2. Logs to SQL database
+	# 3. Proxies to firewall at 10.10.10.1:1813 (WAITS for response)
+	# 4. If firewall responds within 20 seconds → Client gets Accounting-Response
+	# 5. If firewall doesn't respond → Client gets NO response (FAILS)
+	#
+	# NOTE: Full email address restoration happens in pre-proxy section
+	#       Firewall receives: user@domain.com (not just username)
+	#
+	# ENABLED: Proxying to firewall
+	update control {
+		Proxy-To-Realm := "firewall_accounting"
+	}
+EOF
+    
+    # Insert the replication config into the accounting section
+    awk -v replication="$(cat /tmp/acct_replication.conf)" '
+    BEGIN { skip=0; replaced=0 }
+    /# --- BEGIN FIREWALL ACCOUNTING REPLICATION ---/ { 
+        print
+        skip=1
+        next 
+    }
+    /# --- END FIREWALL ACCOUNTING REPLICATION ---/ { 
+        if (skip && !replaced) {
+            print replication
+            replaced=1
+        }
+        skip=0
+        print
+        next
+    }
+    !skip { print }
+    ' /etc/freeradius/sites-available/default > /tmp/default.acct
+    
+    if [ -s /tmp/default.acct ]; then
+        mv /tmp/default.acct /etc/freeradius/sites-available/default
+        echo "Accounting replication to firewall ${FIREWALL_ACCT_SERVER}:${FIREWALL_ACCT_PORT} enabled successfully"
+    else
+        echo "Warning: Failed to enable accounting replication"
+    fi
+else
+    echo "Accounting packet replication is DISABLED"
+fi
+
 # add support to second level like: .com.br, .com.ar
 sed -i "s|BASE_DOMAIN|$BASE_DOMAIN|g" /etc/freeradius/mods-available/ldap
 if [[ ${DOMAIN_EXTENSION} =~ [.] ]]; then
@@ -269,10 +336,14 @@ for i in "${FILES_644[@]}"
 do
 	if [ -f "/certs/$i" ]; then
 	    cp /certs/$i /etc/raddb/certs/$i
-	    chmod 644 /etc/raddb/certs/$i
+	chmod 644 /etc/raddb/certs/$i
 	fi
 done
 
+# Start radrelay daemon if accounting replication is enabled
+if [ "${ENABLE_ACCT_REPLICATION}" = "true" ]; then
+    /start-radrelay.sh || echo "Warning: radrelay failed to start, accounting replication may not work"
+fi
 
 # Start FreeRADIUS in foreground mode
 exec freeradius -X

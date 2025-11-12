@@ -25,7 +25,7 @@ INSERT INTO `admin_users` (`username`, `password_hash`, `email`, `first_login`)
 VALUES (
   'admin',
   '$2y$12$RtJyHPcekAXoG2wV5jc39uZQ2PqeBCObutxW/MIet5hVjRh2hXUBO',
-  'admin@krea.edu.in',
+  'admin@yourdomain.com',
   1
 ) ON DUPLICATE KEY UPDATE 
   `username` = VALUES(`username`);

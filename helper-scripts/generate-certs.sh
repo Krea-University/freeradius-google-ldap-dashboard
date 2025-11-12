@@ -28,17 +28,17 @@ STATE=${STATE:-California}
 read -p "City [San Francisco]: " CITY
 CITY=${CITY:-San Francisco}
 
-read -p "Organization Name [KREA University]: " ORG
-ORG=${ORG:-KREA University}
+read -p "Organization Name [Your Organization]: " ORG
+ORG=${ORG:-Your Organization}
 
-read -p "Common Name for CA [KREA Certificate Authority]: " CA_CN
-CA_CN=${CA_CN:-KREA Certificate Authority}
+read -p "Common Name for CA [Your Organization Certificate Authority]: " CA_CN
+CA_CN=${CA_CN:-Your Organization Certificate Authority}
 
-read -p "Common Name for Server [radius.krea.edu.in]: " SERVER_CN
-SERVER_CN=${SERVER_CN:-radius.krea.edu.in}
+read -p "Common Name for Server [radius.yourdomain.com]: " SERVER_CN
+SERVER_CN=${SERVER_CN:-radius.yourdomain.com}
 
-read -p "Email Address [admin@krea.edu.in]: " EMAIL
-EMAIL=${EMAIL:-admin@krea.edu.in}
+read -p "Email Address [admin@yourdomain.com]: " EMAIL
+EMAIL=${EMAIL:-admin@yourdomain.com}
 
 read -p "Certificate Validity (days) [3650]: " VALIDITY
 VALIDITY=${VALIDITY:-3650}

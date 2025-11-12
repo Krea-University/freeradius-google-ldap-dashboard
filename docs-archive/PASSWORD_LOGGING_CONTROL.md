@@ -83,14 +83,14 @@ The `radpostauth` table stores authentication attempts. The `pass` column will c
 ```sql
 username     | pass          | reply        | authdate
 -------------|---------------|--------------|-------------------
-user@krea.edu.in | ***HIDDEN***  | Access-Accept | 2025-11-11 13:45:32
+user@yourdomain.com | ***HIDDEN***  | Access-Accept | 2025-11-11 13:45:32
 ```
 
 **Development:**
 ```sql
 username     | pass                    | reply        | authdate
 -------------|-------------------------|--------------|-------------------
-user@krea.edu.in | SenthilNasa005$$$       | Access-Accept | 2025-11-11 13:45:32
+user@yourdomain.com | MyPassword123       | Access-Accept | 2025-11-11 13:45:32
 ```
 
 ## Security Recommendations

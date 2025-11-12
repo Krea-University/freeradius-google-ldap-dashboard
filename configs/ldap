@@ -25,13 +25,13 @@ ldap {
 
 	#  Administrator account for searching and possibly modifying.
 	#  If using SASL + KRB5 these should be commented out.
-	identity = 'CaringStro'
-	password = 'TZR7MeXDFqDEeMLjN8N2gADY'
+	identity = 'LDAP_IDENTITY_PLACEHOLDER'
+	password = 'LDAP_PASSWORD_PLACEHOLDER'
 
 	#  Unless overridden in another section, the dn from which all
 	#  searches will start from.
 	#  Since all domains are under same Google Workspace, we search broadly
-	base_dn = 'dc=krea,dc=edu,dc=in'
+	base_dn = 'dc=BASE_DOMAIN,dc=DOMAIN_EXTENSION'
 
 	#
 	#  You can run the 'ldapsearch' command line tool using the
@@ -203,7 +203,7 @@ ldap {
 		#  to identify a single user object.
 		#
 		#  For Google LDAP supporting multiple domains in same workspace
-		#  Search for users from krea.edu.in, krea.ac.in, and ifmr.ac.in
+		#  Search for users from all configured domains (set in DOMAIN_CONFIG env variable)
 		#
 		filter = "(|(mail=%{User-Name})(uid=%{%{Stripped-User-Name}:-%{User-Name}}))"
 
@@ -506,19 +506,21 @@ ldap {
 		#sasl_secprops = 'noanonymous,noplain,maxssf=0'
 
 		#  Seconds to wait for LDAP query to finish. default: 20
-		res_timeout = 10
+		#  Reduced for faster timeout detection
+		res_timeout = 5
 
 		#  Seconds LDAP server has to process the query (server-side
 		#  time limit). default: 20
 		#
 		#  LDAP_OPT_TIMELIMIT is set to this value.
-		srv_timelimit = 3
+		srv_timelimit = 5
 
 		#  Seconds to wait for response of the server. (network
 		#  failures) default: 10
 		#
 		#  LDAP_OPT_NETWORK_TIMEOUT is set to this value.
-		net_timeout = 1
+		#  Increased for better Google LDAP connectivity
+		net_timeout = 3
 
 		#  LDAP_OPT_X_KEEPALIVE_IDLE
 		idle = 60

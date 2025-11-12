@@ -15,8 +15,10 @@ COPY configs/eap /etc/freeradius/mods-enabled/eap
 COPY configs/queries.conf /etc/freeradius/mods-config/sql/main/mysql/queries.conf
 COPY configs/proxy.conf /etc/freeradius/proxy.conf
 COPY init.sh /usr/local/bin
-RUN chmod +x /usr/local/bin/init.sh && \
-    sed -i 's/\r$//' /usr/local/bin/init.sh
+COPY start-radrelay.sh /start-radrelay.sh
+RUN chmod +x /usr/local/bin/init.sh /start-radrelay.sh && \
+    sed -i 's/\r$//' /usr/local/bin/init.sh && \
+    sed -i 's/\r$//' /start-radrelay.sh
 RUN ln -s /etc/freeradius/mods-available/ldap /etc/freeradius/mods-enabled/ldap
 RUN ln -s /etc/freeradius/mods-available/sql /etc/freeradius/mods-enabled/sql
 RUN ln -s /etc/freeradius/mods-available/cache /etc/freeradius/mods-enabled/cache
