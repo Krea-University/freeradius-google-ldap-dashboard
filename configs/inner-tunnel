@@ -181,9 +181,12 @@ authorize {
 	#
 	#  For Google LDAP: Use LDAP bind authentication
 	#  This is required because Google LDAP doesn't expose NT-Password
-	#  Set Auth-Type for BOTH cache hit and cache miss scenarios
+	#  CRITICAL: This MUST come after cache lookup to override cached Auth-Type
+	#  Windows uses PAP (sends User-Password), Mac uses EAP-GTC
+	#  If cache was created by Mac (Auth-Type=eap) but Windows connects,
+	#  we need to override to Auth-Type=ldap for PAP authentication
 	#
-	if (User-Password && !control:Auth-Type) {
+	if (User-Password) {
 		update control {
 			Auth-Type := ldap
 		}
@@ -236,6 +239,61 @@ authenticate {
 	#  in the 'authorize' section supplies a password.  The
 	#  password can be clear-text, or encrypted.
 	Auth-Type PAP {
+		# Fix for Mac WiFi MIME-encoded passwords
+		# Mac sends: Balaji@0320=3D24=3D24=3D24
+		# =3D is MIME encoding for = character
+		# =24 is MIME encoding for $ character
+		# So =3D24 means =$, which needs two-step decoding:
+		# Step 1: =3D24 → =24 (decode =3D to =)
+		# Step 2: =24 → $ (decode =24 to $)
+		
+		# First, decode =3D to = (do this multiple times for all occurrences)
+		if (User-Password =~ /^(.*)=3D(.*)$/) {
+			update request {
+				Tmp-String-9 := "%{1}=%{2}"
+			}
+			if (Tmp-String-9 =~ /^(.*)=3D(.*)$/) {
+				update request {
+					Tmp-String-9 := "%{1}=%{2}"
+				}
+			}
+			if (Tmp-String-9 =~ /^(.*)=3D(.*)$/) {
+				update request {
+					Tmp-String-9 := "%{1}=%{2}"
+				}
+			}
+			if (Tmp-String-9 =~ /^(.*)=3D(.*)$/) {
+				update request {
+					Tmp-String-9 := "%{1}=%{2}"
+				}
+			}
+			# Apply first decoding step
+			update request {
+				User-Password := "%{Tmp-String-9}"
+			}
+		}
+		
+		# Now decode =24 to $ (do this multiple times for all $ symbols)
+		if (User-Password =~ /^(.*)=24(.*)$/) {
+			update request {
+				Tmp-String-9 := "%{1}$%{2}"
+			}
+			if (Tmp-String-9 =~ /^(.*)=24(.*)$/) {
+				update request {
+					Tmp-String-9 := "%{1}$%{2}"
+				}
+			}
+			if (Tmp-String-9 =~ /^(.*)=24(.*)$/) {
+				update request {
+					Tmp-String-9 := "%{1}$%{2}"
+				}
+			}
+			# Apply second decoding step
+			update request {
+				User-Password := "%{Tmp-String-9}"
+			}
+		}
+		
 		#pap
 		ldap
 	}
