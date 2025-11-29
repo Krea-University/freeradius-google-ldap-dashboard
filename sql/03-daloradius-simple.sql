@@ -52,11 +52,7 @@ CREATE TABLE IF NOT EXISTS userinfo (
 INSERT IGNORE INTO operators (username, password, firstname, lastname, title, department, company) VALUES
 ('administrator', '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', 'Default', 'Administrator', 'Administrator', 'IT', 'Krea University');
 
--- Add columns to NAS table if they don't exist (ignore errors if they already exist)
-SET SQL_MODE = '';
-ALTER TABLE nas ADD COLUMN ports int(5) DEFAULT NULL;
-ALTER TABLE nas ADD COLUMN server varchar(64) DEFAULT NULL;
-ALTER TABLE nas ADD COLUMN community varchar(50) DEFAULT NULL;
-SET SQL_MODE = 'STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO';
+-- Columns already added in 02-daloradius-schema.sql
+-- Skipping duplicate ALTER TABLE statements to prevent errors
 
 COMMIT;
