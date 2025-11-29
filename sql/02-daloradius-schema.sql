@@ -88,9 +88,27 @@ INSERT IGNORE INTO billing_plans (planname, plancost, plancurrency, plangroup, p
 ('Student Plan', 0.00, 'INR', 'student', 'Limited', 'Daily', '28800', 'yes', NOW(), 'system');
 
 -- Extended NAS table for DaloRADIUS
-ALTER TABLE nas ADD COLUMN IF NOT EXISTS ports int(5) DEFAULT NULL;
-ALTER TABLE nas ADD COLUMN IF NOT EXISTS server varchar(64) DEFAULT NULL;
-ALTER TABLE nas ADD COLUMN IF NOT EXISTS community varchar(50) DEFAULT NULL;
+-- Check and add columns if they don't exist (MySQL 8.0 compatible)
+SET @stmt = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema=DATABASE() AND table_name='nas' AND column_name='ports') = 0,
+    'ALTER TABLE nas ADD COLUMN ports int(5) DEFAULT NULL',
+    'SELECT "Column ports already exists" AS message');
+PREPARE add_column FROM @stmt;
+EXECUTE add_column;
+DEALLOCATE PREPARE add_column;
+
+SET @stmt = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema=DATABASE() AND table_name='nas' AND column_name='server') = 0,
+    'ALTER TABLE nas ADD COLUMN server varchar(64) DEFAULT NULL',
+    'SELECT "Column server already exists" AS message');
+PREPARE add_column FROM @stmt;
+EXECUTE add_column;
+DEALLOCATE PREPARE add_column;
+
+SET @stmt = IF((SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema=DATABASE() AND table_name='nas' AND column_name='community') = 0,
+    'ALTER TABLE nas ADD COLUMN community varchar(50) DEFAULT NULL',
+    'SELECT "Column community already exists" AS message');
+PREPARE add_column FROM @stmt;
+EXECUTE add_column;
+DEALLOCATE PREPARE add_column;
 
 -- Insert your access points with extended info
 INSERT IGNORE INTO nas (nasname, shortname, type, ports, secret, server, community, description) VALUES
