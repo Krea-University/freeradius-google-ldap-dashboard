@@ -8,6 +8,8 @@ PASSWORD="${1}"
 
 # Decode quoted-printable encoding
 # Common patterns:
+#   =3D24 -> $ (This is the specific GTC pattern: =3D is =, 24 is $, together =3D24 becomes =$ but in this context it's $)
+#   Actually =3D24 represents a literal $ character in Quoted-Printable
 #   =24 -> $
 #   =3D -> =
 #   =20 -> space
@@ -17,7 +19,10 @@ PASSWORD="${1}"
 #   =26 -> &
 #   =40 -> @
 
-echo "$PASSWORD" | sed -e 's/=24/$/g' \
+# Process in the correct order to handle =3D24 correctly
+# First decode the special pattern =3D24 which represents $
+echo "$PASSWORD" | sed -e 's/=3D24/$/g' \
+                       -e 's/=24/$/g' \
                        -e 's/=3D/=/g' \
                        -e 's/=20/ /g' \
                        -e 's/=21/!/g' \

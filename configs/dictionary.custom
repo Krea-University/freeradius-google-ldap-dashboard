@@ -1,0 +1,16 @@
+# Custom FreeRADIUS Dictionary
+# Defines custom attributes used in this deployment
+
+# Error-Type attribute for enhanced authentication error tracking
+# Used to categorize authentication failures for reporting
+ATTRIBUTE	Error-Type	3000	string
+
+# =================================================================================
+# Aruba Vendor-Specific Attributes (VSA)
+# =================================================================================
+# NOTE: FreeRADIUS 3.0.23 includes dictionary.aruba by default
+# The Aruba vendor (ID: 14823) and common attributes are already defined
+# including: Aruba-User-Role, Aruba-User-VLAN, Aruba-AP-Group, etc.
+#
+# No additional Aruba definitions needed - use built-in dictionary
+# =================================================================================

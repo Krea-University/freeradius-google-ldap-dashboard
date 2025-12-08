@@ -138,6 +138,9 @@ eap {
 		#  authentication itself.
 		#
 		auth_type = PAP
+		
+		#  Enable verbose logging for debugging GTC password extraction
+		verbose = no
 	}
 
 	## Common TLS configuration for TLS-based EAP types
@@ -665,8 +668,9 @@ eap {
 		#  the reply to the tunneled request.
 		#
 		#  allowed values: {no, yes}
+		#  ENABLED for EAP-TTLS: Ensure VLAN attributes from inner tunnel reach client
 		#
-		use_tunneled_reply = no
+		use_tunneled_reply = yes
 
 		#
 		#  The inner tunneled request can be sent
@@ -783,8 +787,9 @@ eap {
 		#	}
 		#
 		#  This will cache attributes for the final Access-Accept.
+		#  ENABLED for PEAP: Ensure VLAN attributes from inner tunnel reach client
 		#
-		use_tunneled_reply = no
+		use_tunneled_reply = yes
 
 		#  When the tunneled session is proxied, the
 		#  home server may not understand EAP-MSCHAP-V2.

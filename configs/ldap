@@ -559,9 +559,12 @@ ldap {
 		# using ldaps (port 636) connections
 		start_tls = no
 
-#		ca_file	= ${certdir}/cacert.pem
-
-#		ca_path	= ${certdir}
+		#  CA certificates for verifying LDAP server certificate
+		#  Use system CA certificates first, fall back to FreeRADIUS CA
+		#  This is critical for Google Workspace LDAP which uses valid HTTPS certificates
+		ca_path = /etc/ssl/certs/
+		
+		# Client certificate for mutual TLS authentication with Google LDAP
 		certificate_file = /etc/freeradius/certs/ldap-client.crt
 		private_key_file = /etc/freeradius/certs/ldap-client.key
 #		random_file = /dev/urandom
@@ -576,6 +579,11 @@ ldap {
  		#
 		#  The default is libldap's default, which varies based
 		#  on the contents of ldap.conf.
+		#
+		#  NOTE: For Google Workspace LDAP (ldaps.google.com), we use 'allow' 
+		#  to permit connections even if certificate verification encounters issues.
+		#  Google's certificates should be valid, but this provides fallback.
+		#  If you have certificate issues, check that /etc/ssl/certs/ is properly populated.
 
 		require_cert	= 'allow'
 	}

@@ -1,0 +1,187 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # MySQL Database for Testing
+  # ========================================
+  mysql-test:
+    image: mysql:8.0
+    container_name: radius-mysql-test
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: radius
+      MYSQL_USER: radius
+      MYSQL_PASSWORD: radiuspass
+      MYSQL_INITDB_SKIP_TZINFO: 1
+    ports:
+      - "3307:3306"
+    volumes:
+      # Mount all SQL initialization scripts
+      - ./sql/00-init-radius-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./sql/01-add-error-tracking-columns.sql:/docker-entrypoint-initdb.d/02-error-tracking.sql
+      - ./sql/02-create-operators-table.sql:/docker-entrypoint-initdb.d/03-operators.sql
+      - ./tests/setup-test-data.sql:/docker-entrypoint-initdb.d/04-test-data.sql
+      - mysql_test_data:/var/lib/mysql
+    networks:
+      - radius-test-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "radius", "-pradiuspass"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+  # ========================================
+  # FreeRADIUS Server for Testing
+  # ========================================
+  freeradius-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: radius-server-test
+    ports:
+      - "1812:1812/udp"  # Authentication
+      - "1813:1813/udp"  # Accounting
+    environment:
+      # MySQL configuration
+      - MYSQL_HOST=mysql-test
+      - MYSQL_PORT=3306
+      - MYSQL_USER=radius
+      - MYSQL_PASSWORD=radiuspass
+      - MYSQL_DATABASE=radius
+
+      # RADIUS configuration
+      - SHARED_SECRET=testing123
+      - ACCESS_ALLOWED_CIDR=0.0.0.0/0
+
+      # Password logging (enable for testing)
+      - PASSWORD_LOGGING=true
+
+      # Google LDAP (optional for testing - will use local users instead)
+      - LDAP_SERVER=ldap.google.com
+      - LDAP_IDENTITY=serviceaccount@domain.com
+      - LDAP_PASSWORD=changeme
+      - LDAP_BASE_DN=dc=domain,dc=com
+    depends_on:
+      mysql-test:
+        condition: service_healthy
+    networks:
+      - radius-test-net
+    volumes:
+      - ./configs:/etc/freeradius/3.0/mods-enabled
+      - ./logs:/var/log/freeradius
+    command: freeradius -X
+    healthcheck:
+      test: ["CMD", "pgrep", "freeradius"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ========================================
+  # New Web Application (Modern Dashboard)
+  # ========================================
+  webapp-test:
+    build:
+      context: ./radius-gui
+      dockerfile: Dockerfile
+    container_name: radius-webapp-test
+    ports:
+      - "8080:80"
+    environment:
+      # Database configuration
+      - DB_HOST=mysql-test
+      - DB_PORT=3306
+      - DB_NAME=radius
+      - DB_USER=radius
+      - DB_PASSWORD=radiuspass
+
+      # Application settings
+      - APP_URL=http://localhost:8080
+      - APP_TIMEZONE=Asia/Kolkata
+      - SESSION_SECURE=false
+      - SESSION_LIFETIME=7200
+
+      # Testing environment
+      - APP_ENV=testing
+      - APP_DEBUG=true
+    depends_on:
+      mysql-test:
+        condition: service_healthy
+    networks:
+      - radius-test-net
+    volumes:
+      - ./radius-gui:/var/www/html/radius-gui
+      - webapp_logs:/var/www/html/radius-gui/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ========================================
+  # RADIUS Test Client
+  # ========================================
+  radclient-test:
+    image: ubuntu:22.04
+    container_name: radius-client-test
+    networks:
+      - radius-test-net
+    depends_on:
+      freeradius-test:
+        condition: service_healthy
+      mysql-test:
+        condition: service_healthy
+      webapp-test:
+        condition: service_healthy
+    volumes:
+      - ./tests:/tests
+    environment:
+      - RADIUS_SERVER=freeradius-test
+      - RADIUS_SECRET=testing123
+      - MYSQL_HOST=mysql-test
+      - MYSQL_USER=radius
+      - MYSQL_PASSWORD=radiuspass
+      - MYSQL_DATABASE=radius
+      - WEBAPP_URL=http://webapp-test
+    command: >
+      bash -c "
+        echo 'Installing dependencies...' &&
+        apt-get update -qq &&
+        apt-get install -y -qq freeradius-utils curl jq mysql-client iputils-ping netcat &&
+        echo 'Dependencies installed successfully!' &&
+        echo '' &&
+        echo '========================================' &&
+        echo 'RADIUS Test Client Ready!' &&
+        echo '========================================' &&
+        echo 'Services:' &&
+        echo '  - RADIUS Server: freeradius-test:1812' &&
+        echo '  - MySQL Database: mysql-test:3306' &&
+        echo '  - Web Application: webapp-test:80 (http://localhost:8080)' &&
+        echo '' &&
+        echo 'Run tests with:' &&
+        echo '  docker exec radius-client-test /tests/run-all-tests.sh' &&
+        echo '========================================' &&
+        echo '' &&
+        tail -f /dev/null
+      "
+    stdin_open: true
+    tty: true
+
+networks:
+  radius-test-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+volumes:
+  mysql_test_data:
+    name: radius_mysql_test_data
+  webapp_logs:
+    name: radius_webapp_logs

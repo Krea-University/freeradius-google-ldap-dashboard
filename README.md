@@ -1,22 +1,46 @@
 # FreeRADIUS Google LDAP Enterprise Dashboard
 
-🚀 **High-Performance Enterprise RADIUS Authentication** with Google Workspace Integration
+🚀 **High-Performance Enterprise RADIUS Authentication** with Google Workspace Integration + Modern Monitoring Dashboard
 
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=flat-square&logo=docker)](https://www.docker.com/) [![License](https://img.shields.io/github/license/senthilnasa/freeradius-google-ldap-dashboard?style=flat-square)](LICENSE) ![Performance](https://img.shields.io/badge/Auth%20Speed-0.08s%20cached-brightgreen?style=flat-square)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue?style=flat-square&logo=docker)](https://www.docker.com/) [![License](https://img.shields.io/github/license/senthilnasa/freeradius-google-ldap-dashboard?style=flat-square)](LICENSE) ![Performance](https://img.shields.io/badge/Auth%20Speed-0.08s%20cached-brightgreen?style=flat-square) [![Tests](https://img.shields.io/badge/Tests-Automated-success?style=flat-square)](TESTING.md)
+
+---
+
+## 🆕 What's New
+
+**✨ Modern Dashboard (December 2024):**
+- 🎨 **New MVC Dashboard** - Professional monitoring UI with 14 comprehensive pages
+- 📊 **PDF Reports** - Generate professional PDF reports with TCPDF
+- 🔐 **Role-Based Access** - 3-tier permission system (Superadmin/Network Admin/Helpdesk)
+- 📈 **Enhanced Error Tracking** - Detailed error categorization and reporting
+- 🧪 **Automated Testing** - Complete test suite with Docker integration
+- 📝 **Migration Guide** - Easy upgrade from legacy dashboard
+
+**[➡️ See Modern Dashboard Documentation](radius-gui/README.md)** | **[➡️ Migration Guide](radius-gui/MIGRATION.md)**
 
 ---
 
 ## 🎯 What You Get
 
+### Core Features
 - ✅ **Blazing Fast** - 50x faster with LDAP caching (0.08s cached auth)
 - ✅ **High Performance** - Optimized connection pool (10-50 concurrent connections)
 - ✅ **Production Ready** - Supports 100+ concurrent users, 200+ auth/sec
 - ✅ **Google Integration** - Seamless Google Workspace LDAP authentication
 - ✅ **Multi-Domain** - Unlimited domains with automatic VLAN assignment
 - ✅ **Firewall Sync** - Real-time session replication to firewall (User-ID)
-- ✅ **Helpful Errors** - Users see specific error messages, not "Unable to connect"
+- ✅ **Helpful Errors** - Users see specific error messages with detailed tracking
 - ✅ **Easy Setup** - One-command Docker deployment
 - ✅ **Comprehensive Docs** - Everything you need in this README
+
+### Modern Dashboard Features
+- ✅ **14 Monitoring Pages** - Dashboard, Online Users, Auth Log, Reports, User Management, Settings
+- ✅ **PDF & CSV Exports** - Professional reports with TCPDF library
+- ✅ **Enhanced Error Tracking** - 6 error types (password_wrong, user_not_found, ldap_connection_failed, ssl_certificate_error, invalid_domain, authentication_failed)
+- ✅ **Timezone Support** - Store GMT/UTC, display IST (configurable)
+- ✅ **Role-Based Access Control** - Fine-grained permissions system
+- ✅ **Modern UI** - Bootstrap 5, DataTables, Chart.js integration
+- ✅ **Automated Testing** - RADIUS + Web application test suite
 
 ---
 
@@ -39,14 +63,18 @@ nano .env  # Update: LDAP_BASE_DN, DOMAIN_CONFIG, passwords
 # 4. Deploy!
 docker-compose up -d
 
-# 5. Access dashboard
-# http://localhost:8080 (admin/admin123)
+# 5. Access modern dashboard
+# http://localhost:8080/radius-gui/public/ (admin/password)
 
 # 6. Test authentication
 docker exec freeradius-google-ldap radtest user@yourdomain.com password localhost 0 testing123
+
+# 7. Run automated tests (optional)
+./test.sh
 ```
 
 **First auth**: ~2-3 seconds | **Cached auth**: ~0.08 seconds (50x faster!)
+**Dashboard**: Modern MVC architecture with PDF reports and role-based access
 
 ---
 
@@ -82,19 +110,32 @@ cd helper-scripts
 
 ## 📖 Documentation
 
-### 📚 **[OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)**
-Complete guide on performance optimizations:
-- LDAP connection pool tuning
-- Cache configuration
-- Performance benchmarks
-- Tuning for different environments
+### 🎨 **Modern Dashboard** (NEW!)
+- **[radius-gui/README.md](radius-gui/README.md)** - Complete dashboard documentation
+- **[radius-gui/DEPLOYMENT.md](radius-gui/DEPLOYMENT.md)** - Dashboard deployment guide
+- **[radius-gui/MIGRATION.md](radius-gui/MIGRATION.md)** - Migrate from legacy dashboard
+- **[radius-gui/APPLICATION_SUMMARY.md](radius-gui/APPLICATION_SUMMARY.md)** - Feature summary
 
-### 📁 **[docs-archive/](docs-archive/)**
-Archived detailed documentation:
-- Original README
-- Feature-specific guides (caching, firewall, errors, etc.)
-- Setup checklists
-- Troubleshooting guides
+### 🧪 **Testing** (NEW!)
+- **[TESTING.md](TESTING.md)** - Complete testing guide with automated tests
+- **[test.sh](test.sh)** - One-command test runner
+- Test coverage: RADIUS authentication, accounting, web application
+
+### 📚 **Performance & Optimization**
+- **[OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)** - Complete performance guide
+  - LDAP connection pool tuning
+  - Cache configuration
+  - Performance benchmarks
+  - Tuning for different environments
+- **[ENHANCED_LOGGING_README.md](ENHANCED_LOGGING_README.md)** - Error tracking & logging
+
+### 📁 **Archived Documentation**
+- **[docs-archive/](docs-archive/)** - Archived detailed guides
+  - Original README
+  - Feature-specific guides (caching, firewall, errors, etc.)
+  - Setup checklists
+  - Troubleshooting guides
+- **[archive/dashboard-legacy/](archive/dashboard-legacy/)** - Old dashboard (deprecated)
 
 ---
 
@@ -207,19 +248,49 @@ Users authenticating with `john@staff.company.com` → Assigned to VLAN 10
 - 🌐 **Auto VLAN Assignment** - Based on email domain
 - 💬 **Helpful Error Messages** - Users see specific failure reasons
 
+### Enhanced Error Tracking (NEW!)
+- 📊 **6 Error Types** - Categorized error tracking:
+  - `password_wrong` - Invalid password attempts
+  - `user_not_found` - Non-existent user attempts
+  - `ldap_connection_failed` - LDAP connectivity issues
+  - `ssl_certificate_error` - SSL/TLS certificate problems
+  - `invalid_domain` - Domain not configured
+  - `authentication_failed` - Generic authentication failures
+- 💾 **Database Logging** - Store Access-Accept & Access-Reject with detailed messages
+- 🕐 **Timezone Support** - Store GMT/UTC timestamps, display IST (configurable)
+- 📈 **Error Analytics** - Dashboard with error breakdown and trends
+
+### Modern Dashboard (NEW!)
+- 🎨 **14 Comprehensive Pages** - Professional monitoring interface
+  - Dashboard with real-time KPIs
+  - Online Users tracking
+  - Authentication Log with error tracking
+  - User Session History
+  - Top Users by Bandwidth
+  - NAS/AP Usage Statistics
+  - Error Analytics
+  - 3 Advanced Reports (Daily Auth, Monthly Usage, Failed Logins)
+  - User Management (CRUD operations)
+  - Settings & Configuration
+- 📊 **PDF Reports** - Professional PDF generation with TCPDF
+- 💾 **CSV Exports** - Excel-compatible exports with UTF-8 BOM
+- 🔐 **Role-Based Access** - 3-tier RBAC (Superadmin, Network Admin, Helpdesk)
+- 🎨 **Modern UI** - Bootstrap 5, DataTables, Chart.js
+
 ### Advanced Features
 - 🔥 **Firewall Replication** - Sync sessions to firewall (User-ID)
-- 📊 **Real-Time Dashboard** - Web UI for monitoring
-- 🔒 **Password Security** - Passwords never logged or stored
-- 📈 **Session Management** - Track active connections
-- 🧪 **Testing Tools** - Helper scripts for debugging
+- 🔒 **Password Security** - Bcrypt hashing with auto-upgrade from legacy (SHA-256/MD5)
+- 📈 **Session Management** - Track active connections in real-time
+- 🧪 **Automated Testing** - Complete RADIUS + Web application test suite
+- 🔐 **Security Hardening** - CSRF protection, XSS prevention, prepared statements
 
 ### Enterprise Ready
 - 🐳 **Docker Containerized** - Single-command deployment
-- 💾 **MySQL 8.0 Backend** - High-performance database
+- 💾 **MySQL 8.0 Backend** - High-performance database with optimized queries
 - 🔄 **Auto-Restart** - Health checks and recovery
-- 📝 **Comprehensive Logging** - Audit trails and debugging
+- 📝 **Comprehensive Logging** - Audit trails with enhanced error tracking
 - 🛡️ **Security Hardened** - Production-ready configuration
+- 🧪 **Test Suite** - Automated testing with Docker integration
 
 ---
 
@@ -251,6 +322,60 @@ CACHE_TIMEOUT=3000   # 50 minutes (recommended)
 # CACHE_TIMEOUT=1800 # 30 minutes (more frequent LDAP checks)
 # CACHE_TIMEOUT=7200 # 2 hours (maximum performance)
 ```
+
+---
+
+## 🧪 Testing
+
+### Automated Test Suite (NEW!)
+
+Run the complete test suite with one command:
+
+```bash
+# Run all tests
+./test.sh
+
+# Keep test environment running for debugging
+./test.sh --keep-running
+
+# Rebuild images before testing
+./test.sh --rebuild
+```
+
+### What Gets Tested
+
+**RADIUS Authentication Tests:**
+- ✅ Successful authentication with valid credentials
+- ✅ Failed authentication with wrong password (error_type='password_wrong')
+- ✅ Failed authentication for non-existent user (error_type='user_not_found')
+- ✅ Database logging verification
+
+**RADIUS Accounting Tests:**
+- ✅ Accounting Start packet
+- ✅ Accounting Interim-Update packet
+- ✅ Accounting Stop packet
+- ✅ Database record verification
+
+**Web Application Tests:**
+- ✅ Login functionality
+- ✅ Dashboard access
+- ✅ All page navigation
+- ✅ CSV export
+- ✅ PDF export (reports)
+- ✅ Logout and session management
+
+### Test Environment
+
+The test suite uses Docker Compose to create an isolated environment:
+
+- **MySQL Test Database** (port 3307)
+- **FreeRADIUS Test Server** (ports 1812/1813)
+- **Web Application** (port 8080)
+- **Test Client** (with radclient, curl, mysql-client)
+
+All test data is automatically created and cleaned up.
+
+**📖 See [TESTING.md](TESTING.md) for complete testing documentation.**
 
 ---
 

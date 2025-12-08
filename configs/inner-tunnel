@@ -131,9 +131,10 @@ authorize {
 	#  for the many packets that go back and forth to set up TTLS
 	#  or PEAP.  The load on those servers will therefore be reduced.
 	#
-	eap {
-		ok = return
-	}
+	#  NOTE: For GTC inside TTLS/PEAP, we DON'T return on ok here
+	#  We need to continue through authorize so that when GTC extracts
+	#  the password into User-Password, we can route it to PAP for auth
+	eap
 
 	#
 	#  Read the 'users' file
@@ -179,18 +180,54 @@ authorize {
 	}
 
 	#
-	#  For Google LDAP: Use LDAP bind authentication
-	#  This is required because Google LDAP doesn't expose NT-Password
-	#  CRITICAL: This MUST come after cache lookup to override cached Auth-Type
-	#  Windows uses PAP (sends User-Password), Mac uses EAP-GTC
-	#  If cache was created by Mac (Auth-Type=eap) but Windows connects,
-	#  we need to override to Auth-Type=ldap for PAP authentication
+	#  For Google LDAP: Hybrid authentication support
+	#  Supports both:
+	#  1. PEAP-MSCHAPv2: Uses NT-Password from radcheck table (if available)
+	#  2. TTLS-PAP/EAP-GTC: Falls back to LDAP bind for password validation
 	#
-	if (User-Password) {
+	#  This allows the system to support:
+	#  - Windows WiFi (PEAP-MSCHAPv2 if passwords synced to radcheck)
+	#  - Mac/Linux (TTLS-PAP or PEAP-GTC with LDAP bind)
+	#  - Aruba APs (PEAP or TTLS, flexible)
+	#
+	
+	#  Strategy: Try MSCHAPv2 first (if hash available), fall back to LDAP bind
+	#  Check for NT-Password: if present in response, MSCHAPv2 will work
+	#  Default to LDAP bind for most cases (TTLS-PAP, PEAP-GTC, LDAP)
+	
+	#  NOTE: For EAP (especially GTC inside TTLS/PEAP), we do NOT set Auth-Type here
+	#  The EAP module in the AUTHENTICATE section needs to run to:
+	#  1. Process GTC password response
+	#  2. Extract password to User-Password attribute  
+	#  3. Route through GTC's auth_type setting (which is set to PAP in eap.conf)
+	#  Setting Auth-Type := pap here would skip the EAP authentication module,
+	#  preventing GTC from extracting the User-Password attribute.
+	#
+	#  GTC passwords come URL-encoded (e.g., $ becomes =3D24), so we need to decode them
+	#  before using for LDAP bind
+	#  
+	#  If no EAP and we have User-Password, try LDAP bind
+	if (User-Password && !(&reply:NT-Password || &control:NT-Password)) {
 		update control {
 			Auth-Type := ldap
 		}
 	}
+
+	#
+	#  VLAN Assignment for Inner Tunnel (EAP-TTLS/PEAP)
+	#  Extract domain from username and assign VLAN based on domain
+	#  This is required for tunneled authentication where VLAN must be set in inner tunnel
+	#
+	# Extract domain from username for VLAN assignment
+	if (&User-Name =~ /@(.*)$/) {
+		update request {
+			Tmp-String-0 := "%{1}"
+		}
+	}
+
+	# --- BEGIN DYNAMIC DOMAIN CONFIG FOR INNER TUNNEL ---
+	# This section will be dynamically replaced by init.sh
+	# --- END DYNAMIC DOMAIN CONFIG FOR INNER TUNNEL ---
 
 	#
 	#  Enforce daily limits on time spent logged in.
@@ -239,63 +276,48 @@ authenticate {
 	#  in the 'authorize' section supplies a password.  The
 	#  password can be clear-text, or encrypted.
 	Auth-Type PAP {
-		# Fix for Mac WiFi MIME-encoded passwords
-		# Mac sends: Balaji@0320=3D24=3D24=3D24
-		# =3D is MIME encoding for = character
-		# =24 is MIME encoding for $ character
-		# So =3D24 means =$, which needs two-step decoding:
-		# Step 1: =3D24 → =24 (decode =3D to =)
-		# Step 2: =24 → $ (decode =24 to $)
+		# GTC sends password through EAP, setting it in User-Password or Cleartext-Password
+		# The password is typically encoded in Quoted-Printable format
+		# Example: $ becomes =3D24, so SenthilNasa005$$$$$ becomes SenthilNasa005=3D24=3D24=3D24=3D24=3D24
+		#
+		# We need to:
+		# 1. Identify the password attribute GTC set
+		# 2. Decode it if necessary
+		# 3. Use it for LDAP bind (since Google LDAP doesn't support PAP authentication)
 		
-		# First, decode =3D to = (do this multiple times for all occurrences)
-		if (User-Password =~ /^(.*)=3D(.*)$/) {
-			update request {
-				Tmp-String-9 := "%{1}=%{2}"
-			}
-			if (Tmp-String-9 =~ /^(.*)=3D(.*)$/) {
+		# Priority 1: Check User-Password first
+		if (&User-Password) {
+			# User-Password is set by GTC, but it might be encoded
+			# Decode if it contains = character
+			if (User-Password =~ /=/) {
+				# Password is encoded, decode it using the decode script
 				update request {
-					Tmp-String-9 := "%{1}=%{2}"
+					User-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{User-Password}}"
 				}
 			}
-			if (Tmp-String-9 =~ /^(.*)=3D(.*)$/) {
-				update request {
-					Tmp-String-9 := "%{1}=%{2}"
-				}
-			}
-			if (Tmp-String-9 =~ /^(.*)=3D(.*)$/) {
-				update request {
-					Tmp-String-9 := "%{1}=%{2}"
-				}
-			}
-			# Apply first decoding step
-			update request {
-				User-Password := "%{Tmp-String-9}"
-			}
+			# User-Password is now decoded, use it for LDAP bind
+			ldap
 		}
-		
-		# Now decode =24 to $ (do this multiple times for all $ symbols)
-		if (User-Password =~ /^(.*)=24(.*)$/) {
-			update request {
-				Tmp-String-9 := "%{1}$%{2}"
-			}
-			if (Tmp-String-9 =~ /^(.*)=24(.*)$/) {
+		# Priority 2: Check Cleartext-Password as fallback
+		elsif (&Cleartext-Password) {
+			# Cleartext-Password might be encoded
+			if (Cleartext-Password =~ /=/) {
+				# Decode it
 				update request {
-					Tmp-String-9 := "%{1}$%{2}"
+					Cleartext-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{Cleartext-Password}}"
 				}
 			}
-			if (Tmp-String-9 =~ /^(.*)=24(.*)$/) {
-				update request {
-					Tmp-String-9 := "%{1}$%{2}"
-				}
-			}
-			# Apply second decoding step
+			# For LDAP bind, we need User-Password not Cleartext-Password
 			update request {
-				User-Password := "%{Tmp-String-9}"
+				User-Password := "%{Cleartext-Password}"
 			}
+			ldap
 		}
-		
-		#pap
-		ldap
+		else {
+			# No password found - this shouldn't happen in GTC flow
+			# Return fail to trigger error handling
+			pap
+		}
 	}
 
 	#
@@ -324,7 +346,7 @@ authenticate {
 
 	#
 	#  For Google LDAP: Use LDAP bind authentication
-	#  This is required for PEAP-MSCHAPv2 since Google LDAP
+	#  This is required for PEAP-EAP-GTC since Google LDAP
 	#  doesn't expose NT-Password hashes
 	#
 	Auth-Type LDAP {
@@ -333,6 +355,8 @@ authenticate {
 
 	#
 	#  Allow EAP authentication.
+	#  With PEAP, the default inner-tunnel EAP method is GTC (from eap.conf),
+	#  which uses PAP authentication via LDAP bind.
 	eap
 }
 
@@ -414,7 +438,10 @@ post-auth {
 	#  Instead of "use_tunneled_reply", change this "if (0)" to an
 	#  "if (1)".
 	#
-	if (0) {
+	#  ENABLED: Copy inner tunnel reply to outer session-state for EAP-TTLS/PEAP
+	#  This ensures VLAN and other attributes are available in the outer reply
+	#
+	if (1) {
 		#
 		#  These attributes are for the inner-tunnel only,
 		#  and MUST NOT be copied to the outer reply.
@@ -435,6 +462,7 @@ post-auth {
 		#  session-state list.  The post-auth policy will take
 		#  care of copying the outer session-state list to the
 		#  outer reply.
+		#  This ensures VLAN attributes from the inner tunnel are propagated to the client
 		#
 		update {
 			&outer.session-state: += &reply:

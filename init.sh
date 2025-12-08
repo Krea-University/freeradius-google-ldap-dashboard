@@ -79,12 +79,54 @@ fi
 PASSWORD_LOG_VALUE_ESCAPED=$(echo "${PASSWORD_LOG_VALUE}" | sed 's|/|\\\/|g')
 sed -i "s|ENV_PASSWORD_LOGGING_PLACEHOLDER|${PASSWORD_LOG_VALUE_ESCAPED}|g" /etc/freeradius/mods-config/sql/main/mysql/queries.conf
 
+# =================================================================================
+# VLAN Attribute Configuration Helper Function
+# =================================================================================
+# Function to generate VLAN attribute assignments based on VLAN_ATTRIBUTES env var
+# Supports: Tunnel-Private-Group-ID, Aruba-User-VLAN, Aruba-Named-User-VLAN
+generate_vlan_attributes() {
+    local vlan_value="$1"
+    local vlan_attrs="${VLAN_ATTRIBUTES:-Tunnel-Private-Group-ID}"
+
+    # Start with standard Tunnel attributes (required for RFC compliance)
+    echo "				Tunnel-Type := VLAN"
+    echo "				Tunnel-Medium-Type := IEEE-802"
+
+    # Process comma-separated list of VLAN attributes
+    IFS=',' read -ra ATTRS <<< "$vlan_attrs"
+    for attr in "${ATTRS[@]}"; do
+        # Trim whitespace
+        attr=$(echo "$attr" | xargs)
+
+        case "$attr" in
+            "Tunnel-Private-Group-ID"|"Tunnel-Private-Group-Id")
+                # Send VLAN as INTEGER (no quotes) for AOS10 compatibility
+                # AOS10 treats string values as static VLAN and falls back to DHCP on failure
+                echo "				Tunnel-Private-Group-Id := $vlan_value"
+                ;;
+            "Aruba-User-VLAN")
+                echo "				Aruba-User-VLAN := $vlan_value"
+                ;;
+            "Aruba-Named-User-VLAN")
+                echo "				Aruba-Named-User-VLAN := \"VLAN$vlan_value\""
+                ;;
+            "Cisco-AVPair")
+                echo "				Cisco-AVPair := \"vlan=$vlan_value\""
+                ;;
+            *)
+                echo "# Warning: Unknown VLAN attribute: $attr"
+                ;;
+        esac
+    done
+}
+
 # Update domain configuration with VLAN assignments
 # Parse DOMAIN_CONFIG JSON and dynamically generate FreeRADIUS unlang configuration
 if [ ! -z "$DOMAIN_CONFIG" ]; then
     echo "Updating domain configuration with VLAN assignments..."
     echo "Domain Config: $DOMAIN_CONFIG"
-    
+    echo "VLAN Attributes: ${VLAN_ATTRIBUTES:-Tunnel-Private-Group-ID (default)}"
+
     # Generate dynamic domain configuration file
     cat > /etc/freeradius/mods-config/files/dynamic-domains << 'EOFCONFIG'
 # Dynamically generated domain configuration
@@ -148,6 +190,9 @@ EOFCONFIG
 
             # If key is empty, it's a fallback/default for that domain
             if [ -z "$key" ]; then
+                # Generate VLAN attributes dynamically
+                vlan_attrs=$(generate_vlan_attributes "$vlan")
+
                 cat >> /tmp/dynamic_vlan.conf << UNLANG
 		# $domain (default/others) = $user_type, VLAN $vlan
 		$keyword (&request:Tmp-String-0 == "$domain") {
@@ -155,14 +200,19 @@ EOFCONFIG
 				Tmp-String-1 := "$user_type"
 			}
 			update reply {
-				Tunnel-Type := VLAN
-				Tunnel-Medium-Type := IEEE-802
-				Tunnel-Private-Group-Id := "$vlan"
+$vlan_attrs
+			}
+			# Copy VLAN to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+$vlan_attrs
 			}
 		}
 UNLANG
             else
                 # Key-based matching: check if User-Name contains the key AND domain matches
+                # Generate VLAN attributes dynamically
+                vlan_attrs=$(generate_vlan_attributes "$vlan")
+
                 cat >> /tmp/dynamic_vlan.conf << UNLANG
 		# $domain with key "$key" = $user_type, VLAN $vlan
 		$keyword ((&request:Tmp-String-0 == "$domain") && (&User-Name =~ /$key@/)) {
@@ -170,9 +220,11 @@ UNLANG
 				Tmp-String-1 := "$user_type"
 			}
 			update reply {
-				Tunnel-Type := VLAN
-				Tunnel-Medium-Type := IEEE-802
-				Tunnel-Private-Group-Id := "$vlan"
+$vlan_attrs
+			}
+			# Copy VLAN to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+$vlan_attrs
 			}
 		}
 UNLANG
@@ -192,6 +244,9 @@ UNLANG
                 keyword="elsif"
             fi
 
+            # Generate VLAN attributes dynamically
+            vlan_attrs=$(generate_vlan_attributes "$vlan")
+
             cat >> /tmp/dynamic_vlan.conf << UNLANG
 		# $domain = $user_type, VLAN $vlan (legacy format)
 		$keyword (&request:Tmp-String-0 == "$domain") {
@@ -199,9 +254,11 @@ UNLANG
 				Tmp-String-1 := "$user_type"
 			}
 			update reply {
-				Tunnel-Type := VLAN
-				Tunnel-Medium-Type := IEEE-802
-				Tunnel-Private-Group-Id := "$vlan"
+$vlan_attrs
+			}
+			# Copy VLAN to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+$vlan_attrs
 			}
 		}
 UNLANG
@@ -251,6 +308,7 @@ EOF
 				# Domain not in configuration, reject
 				update control {
 					Auth-Type := Reject
+					Error-Type := "invalid_domain"
 				}
 				update reply {
 					Reply-Message := "Domain not supported"
@@ -262,6 +320,7 @@ EOF
 		# Reject users from unsupported domains or invalid format
 		update control {
 			Auth-Type := Reject
+			Error-Type := "invalid_domain"
 		}
 		update reply {
 			Reply-Message := "Invalid username format or domain not supported"
@@ -296,14 +355,57 @@ EOF
             # Replace the original with the new configuration
             if [ -s /tmp/default.new ]; then
                 mv /tmp/default.new /etc/freeradius/sites-available/default
-                echo "Dynamic domain VLAN configuration applied to FreeRADIUS"
+                echo "Dynamic domain VLAN configuration applied to FreeRADIUS default site"
             else
                 echo "Error: Generated configuration file is empty, keeping original"
+            fi
+
+            # Also update inner-tunnel with same VLAN configuration
+            # This is needed for EAP-TTLS/PEAP authentication where VLAN assignment happens in inner tunnel
+            echo "Applying VLAN configuration to inner-tunnel..."
+            cp /etc/freeradius/sites-available/inner-tunnel /etc/freeradius/sites-available/inner-tunnel.backup
+
+            awk -v new_config="$(cat /tmp/dynamic_vlan.conf)" '
+            BEGIN { skip=0; replaced=0 }
+            /# --- BEGIN DYNAMIC DOMAIN CONFIG FOR INNER TUNNEL ---/ {
+                print
+                print "\tif (&request:Tmp-String-0) {"
+                skip=1
+                next
+            }
+            /# --- END DYNAMIC DOMAIN CONFIG FOR INNER TUNNEL ---/ {
+                if (skip && !replaced) {
+                    print new_config
+                    print "\t\telse {"
+                    print "\t\t\t# Domain not in configuration, reject"
+                    print "\t\t\tupdate control {"
+                    print "\t\t\t\tAuth-Type := Reject"
+                    print "\t\t\t\tError-Type := \"invalid_domain\""
+                    print "\t\t\t}"
+                    print "\t\t\tupdate reply {"
+                    print "\t\t\t\tReply-Message := \"Domain not supported\""
+                    print "\t\t\t}"
+                    print "\t\t}"
+                    print "\t}"
+                    replaced=1
+                }
+                skip=0
+                print
+                next
+            }
+            !skip { print }
+            ' /etc/freeradius/sites-available/inner-tunnel > /tmp/inner-tunnel.new
+
+            if [ -s /tmp/inner-tunnel.new ]; then
+                mv /tmp/inner-tunnel.new /etc/freeradius/sites-available/inner-tunnel
+                echo "Dynamic domain VLAN configuration applied to inner-tunnel"
+            else
+                echo "Error: Generated inner-tunnel configuration file is empty, keeping original"
             fi
         else
             echo "Failed to generate dynamic VLAN configuration"
         fi
-        
+
         echo "Domain configuration updated successfully"
     else
         echo "Failed to parse DOMAIN_CONFIG, using default configuration"

@@ -796,6 +796,16 @@ post-auth {
 		&reply: += &session-state:
 	}
 	
+	#  For EAP-TTLS/PEAP: Ensure VLAN attributes are in the outer tunnel response
+	#  Copy Tunnel attributes from session-state to reply if they exist
+	if (&session-state:Tunnel-Private-Group-Id) {
+		update reply {
+			Tunnel-Type := VLAN
+			Tunnel-Medium-Type := IEEE-802
+			Tunnel-Private-Group-Id := "%{session-state:Tunnel-Private-Group-Id}"
+		}
+	}
+	
 	#  Add role-based attributes to the reply
 	#  Based on the role set during authorization (dynamically set from DOMAIN_CONFIG)
 	if (&control:Tmp-String-1) {
@@ -943,17 +953,11 @@ post-auth {
 	#  The "session-state" attributes are not available here.
 	#
 	Post-Auth-Type REJECT {
-		# log failed authentications in SQL, too.
-		# Skip logging for tunneled EAP (TTLS/PEAP) as inner-tunnel already logged it
-		if (!&session-state:TLS-Session-Cipher-Suite) {
-			sql
-		}
-		
 		#
 		# Send helpful error messages to WiFi clients
 		# This helps users understand WHY authentication failed
 		#
-		
+
 		# Check if it's an LDAP authentication failure (wrong password/username)
 		if (&Module-Failure-Message =~ /bind as user failed/) {
 			update reply {
@@ -999,16 +1003,28 @@ post-auth {
 				Error-Type := "invalid_domain"
 			}
 		}
-		# Generic failure message
+		# Generic failure message (only if Error-Type not already set)
 		else {
-			update reply {
-				Reply-Message := "Authentication failed: Invalid credentials. Please verify your username and password."
+			# Only set reply message if not already set (from authorize section)
+			if (!&reply:Reply-Message) {
+				update reply {
+					Reply-Message := "Authentication failed: Invalid credentials. Please verify your username and password."
+				}
 			}
-			update control {
-				Error-Type := "authentication_failed"
+			# Only set Error-Type if not already set (from authorize section)
+			if (!&control:Error-Type) {
+				update control {
+					Error-Type := "authentication_failed"
+				}
 			}
 		}
-		
+
+		# Log failed authentications in SQL AFTER Error-Type has been set
+		# Skip logging for tunneled EAP (TTLS/PEAP) as inner-tunnel already logged it
+		if (!&session-state:TLS-Session-Cipher-Suite) {
+			sql
+		}
+
 		attr_filter.access_reject
 
 		# Insert EAP-Failure message if the request was
