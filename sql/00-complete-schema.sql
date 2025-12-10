@@ -85,6 +85,7 @@ CREATE TABLE radpostauth (
     error_type VARCHAR(64) DEFAULT NULL COMMENT 'Categorized error: password_wrong, invalid_domain, ldap_error, etc.',
     vlan VARCHAR(16) DEFAULT NULL COMMENT 'Assigned VLAN ID from Tunnel-Private-Group-Id attribute',
     user_type VARCHAR(64) DEFAULT NULL COMMENT 'User type from domain config (Student-MBA, Staff, etc.)',
+    request_log JSON DEFAULT NULL COMMENT 'Complete request attributes: NAS-IP, Port, Calling-Station-Id, AP-Group, Location, SSID, etc.',
     authdate TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Local timestamp (IST or configured timezone)',
     authdate_utc TIMESTAMP NULL DEFAULT NULL COMMENT 'UTC timestamp for cross-timezone consistency',
     INDEX idx_username (username),

@@ -6,6 +6,10 @@
 # Read password from stdin or first argument
 PASSWORD="${1}"
 
+# First, remove any leading/trailing backslashes that might have been added by shell escaping
+# Use tr to remove all backslashes
+PASSWORD=$(echo "$PASSWORD" | tr -d '\\')
+
 # Decode quoted-printable encoding
 # Common patterns:
 #   =3D24 -> $ (This is the specific GTC pattern: =3D is =, 24 is $, together =3D24 becomes =$ but in this context it's $)

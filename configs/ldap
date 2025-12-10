@@ -132,12 +132,13 @@ ldap {
 	#  the name value to be derived from an xlat expansion, or an
 	#  attribute ref.
 	#
-	#  For Google LDAP with PEAP-GTC: Don't map passwords
-	#  LDAP bind authentication will be used instead
+	#  For Google LDAP with PEAP-GTC: Map passwords for PAP authentication
+	#  This allows us to use LDAP search + PAP instead of LDAP bind
+	#  which Google LDAP doesn't support properly
 	#
 	update {
+		control:Cleartext-Password      := 'userPassword'
 #		control:Password-With-Header	+= 'userPassword'
-#		control:Cleartext-Password      := 'userPassword'
 #		control:NT-Password		:= 'ntPassword'
 #		reply:Reply-Message		:= 'radiusReplyMessage'
 #		reply:Tunnel-Type		:= 'radiusTunnelType'

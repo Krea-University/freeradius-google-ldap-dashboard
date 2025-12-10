@@ -38,6 +38,7 @@ class AuthLogController
                     error_type,
                     vlan,
                     user_type,
+                    request_log,
                     authdate,
                     authdate_utc,
                     CONVERT_TZ(authdate_utc, '+00:00', '+05:30') as authdate_ist
@@ -125,6 +126,7 @@ class AuthLogController
                     error_type,
                     vlan,
                     user_type,
+                    request_log,
                     authdate,
                     authdate_utc
                 FROM radpostauth
@@ -162,7 +164,8 @@ class AuthLogController
             'VLAN',
             'User Type',
             'Error Type',
-            'Message'
+            'Message',
+            'Request Log (JSON)'
         ];
 
         $data = [];
@@ -179,7 +182,8 @@ class AuthLogController
                 $vlan,
                 $userType,
                 $log['error_type'] ?? '-',
-                $log['reply_message'] ?? '-'
+                $log['reply_message'] ?? '-',
+                $log['request_log'] ?? ''
             ];
         }
 

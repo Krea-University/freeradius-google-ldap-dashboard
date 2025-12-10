@@ -409,7 +409,7 @@ authorize {
 	#  is meant to mirror the "users" file.
 	#
 	#  See "Authorization Queries" in mods-available/sql
-	-sql
+	sql
 
 	#
 	#  If you are using /etc/smbpasswd, and are also doing
@@ -527,8 +527,7 @@ authenticate {
 	#  in the 'authorize' section supplies a password.  The
 	#  password can be clear-text, or encrypted.
 	Auth-Type PAP {
-		#pap
-		ldap
+		pap
 	}
 
 	#

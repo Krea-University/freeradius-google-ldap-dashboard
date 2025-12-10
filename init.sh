@@ -277,20 +277,15 @@ UNLANG
 	
 	if (&request:Tmp-String-0) {
 		# Query LDAP to verify user exists and password is valid
-		# LDAP performs bind operation which validates credentials
+		# LDAP performs search to find user and return password attributes
 		ldap
 		
-		# If LDAP bind successful, user credentials are validated
+		# If LDAP search successful, user exists in LDAP
 		if (ok || updated) {
-			# User exists in LDAP and LDAP bind with service account credentials succeeded
-			# This means user was found and authentication succeeded via LDAP bind
-			# For WiFi authentication, set Auth-Type to prevent further authentication checks
-			
-			# Use 'noop' Auth-Type which causes the authorize phase to complete successfully
-			# without running any additional authentication modules
-			# This is equivalent to "user authenticated" since LDAP bind succeeded
+			# User exists in LDAP and password attributes have been returned
+			# Let PAP module authenticate using the password from LDAP
 			update control {
-				Auth-Type := Accept
+				Auth-Type := pap
 			}
 			
 			# Dynamic VLAN assignment based on domain

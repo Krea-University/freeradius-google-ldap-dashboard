@@ -13,6 +13,7 @@ COPY configs/ldap /etc/freeradius/mods-available/ldap
 COPY configs/sql /etc/freeradius/mods-available/sql
 COPY configs/cache /etc/freeradius/mods-available/cache
 COPY configs/eap /etc/freeradius/mods-enabled/eap
+COPY configs/exec /etc/freeradius/mods-enabled/exec
 COPY configs/decode-password.sh /etc/freeradius/decode-password.sh
 COPY configs/queries.conf /etc/freeradius/mods-config/sql/main/mysql/queries.conf
 COPY configs/proxy.conf /etc/freeradius/proxy.conf

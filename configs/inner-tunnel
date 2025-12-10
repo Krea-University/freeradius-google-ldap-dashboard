@@ -145,7 +145,7 @@ authorize {
 	#  is meant to mirror the "users" file.
 	#
 	#  See "Authorization Queries" in sql.conf
-	-sql
+	sql
 
 	#
 	#  If you are using /etc/smbpasswd, and are also doing
@@ -183,13 +183,20 @@ authorize {
 	#  Setting Auth-Type := pap here would skip the EAP authentication module,
 	#  preventing GTC from extracting the User-Password attribute.
 	#
-	#  GTC passwords come URL-encoded (e.g., $ becomes =3D24), so we need to decode them
+	#  GTC passwords come URL-encoded (e.g., $ becomes =3D24, # becomes =23), so we need to decode them
 	#  before using for LDAP bind
-	#  
-	#  If no EAP and we have User-Password, try LDAP bind
+	#  Decode password FIRST if it contains = character (indicating URL encoding)
+	if (User-Password && (User-Password =~ /=/)) {
+		update request {
+			User-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{User-Password}}"
+		}
+	}
+
+	#  If no EAP and we have User-Password, use PAP authentication with LDAP-returned password
+	#  (authenticate using mail ID only, regardless of OU status)
 	if (User-Password && !(&reply:NT-Password || &control:NT-Password)) {
 		update control {
-			Auth-Type := ldap
+			Auth-Type := pap
 		}
 	}
 
@@ -206,7 +213,144 @@ authorize {
 	}
 
 	# --- BEGIN DYNAMIC DOMAIN CONFIG FOR INNER TUNNEL ---
-	# This section will be dynamically replaced by init.sh
+	if (&request:Tmp-String-0) {
+		# krea.ac.in with key ".mba" = Student-MBA, VLAN 216
+		if ((&request:Tmp-String-0 == "krea.ac.in") && (&User-Name =~ /.mba@/)) {
+			update control {
+				Tmp-String-1 := "Student-MBA"
+			}
+			update reply {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 216
+			}
+			# Copy VLAN and user type to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 216
+				Tmp-String-1 := "Student-MBA"
+			}
+		}
+		# krea.ac.in with key ".sias" = Student-SIAS, VLAN 224
+		elsif ((&request:Tmp-String-0 == "krea.ac.in") && (&User-Name =~ /.sias@/)) {
+			update control {
+				Tmp-String-1 := "Student-SIAS"
+			}
+			update reply {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 224
+			}
+			# Copy VLAN and user type to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 224
+				Tmp-String-1 := "Student-SIAS"
+			}
+		}
+		# krea.ac.in with key ".phd" = Student-PhD, VLAN 232
+		elsif ((&request:Tmp-String-0 == "krea.ac.in") && (&User-Name =~ /.phd@/)) {
+			update control {
+				Tmp-String-1 := "Student-PhD"
+			}
+			update reply {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 232
+			}
+			# Copy VLAN and user type to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 232
+				Tmp-String-1 := "Student-PhD"
+			}
+		}
+		# krea.ac.in with key ".bba" = Student-BBA, VLAN 240
+		elsif ((&request:Tmp-String-0 == "krea.ac.in") && (&User-Name =~ /.bba@/)) {
+			update control {
+				Tmp-String-1 := "Student-BBA"
+			}
+			update reply {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 240
+			}
+			# Copy VLAN and user type to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 240
+				Tmp-String-1 := "Student-BBA"
+			}
+		}
+		# krea.ac.in (default/others) = Student-Others, VLAN 144
+		elsif (&request:Tmp-String-0 == "krea.ac.in") {
+			update control {
+				Tmp-String-1 := "Student-Others"
+			}
+			update reply {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 144
+			}
+			# Copy VLAN and user type to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 144
+				Tmp-String-1 := "Student-Others"
+			}
+		}
+		# krea.edu.in (default/others) = Staff-Krea, VLAN 248
+		elsif (&request:Tmp-String-0 == "krea.edu.in") {
+			update control {
+				Tmp-String-1 := "Staff-Krea"
+			}
+			update reply {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 248
+			}
+			# Copy VLAN and user type to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 248
+				Tmp-String-1 := "Staff-Krea"
+			}
+		}
+		# ifmr.ac.in (default/others) = IFMR, VLAN 250
+		elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
+			update control {
+				Tmp-String-1 := "IFMR"
+			}
+			update reply {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 250
+			}
+			# Copy VLAN and user type to session-state for EAP-TTLS/PEAP inner tunnel logging
+			update session-state {
+				Tunnel-Type := VLAN
+				Tunnel-Medium-Type := IEEE-802
+				Tunnel-Private-Group-Id := 250
+				Tmp-String-1 := "IFMR"
+			}
+		}
+		else {
+			# Domain not in configuration, reject
+			update control {
+				Auth-Type := Reject
+				Error-Type := "invalid_domain"
+			}
+			update reply {
+				Reply-Message := "Domain not supported"
+			}
+		}
+	}
 	# --- END DYNAMIC DOMAIN CONFIG FOR INNER TUNNEL ---
 
 	#
@@ -263,20 +407,35 @@ authenticate {
 		# We need to:
 		# 1. Identify the password attribute GTC set
 		# 2. Decode it if necessary
-		# 3. Use it for LDAP bind (since Google LDAP doesn't support PAP authentication)
+		# 3. Use it for LDAP bind (for active users) or accept (for suspended users)
 		
 		# Priority 1: Check User-Password first
 		if (&User-Password) {
+			# Debug: Log the password value to see what we're working with
+			# This will help us understand why the regex isn't matching
+			update control {
+				Tmp-String-9 := "%{User-Password}"
+			}
+
 			# User-Password is set by GTC, but it might be encoded
 			# Decode if it contains = character
+			# Note: We check the actual attribute value, not the expanded string
 			if (User-Password =~ /=/) {
 				# Password is encoded, decode it using the decode script
 				update request {
 					User-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{User-Password}}"
 				}
 			}
-			# User-Password is now decoded, use it for LDAP bind
-			ldap
+			else {
+				# Password doesn't contain =, might already be decoded or not encoded
+				# Force decode anyway to handle edge cases
+				update request {
+					User-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{User-Password}}"
+				}
+			}
+			# Use PAP with decoded password to authenticate
+			# LDAP search in authorize returned the Cleartext-Password
+			pap
 		}
 		# Priority 2: Check Cleartext-Password as fallback
 		elsif (&Cleartext-Password) {
@@ -287,11 +446,12 @@ authenticate {
 					Cleartext-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{Cleartext-Password}}"
 				}
 			}
-			# For LDAP bind, we need User-Password not Cleartext-Password
+			# For PAP, we need User-Password not Cleartext-Password
 			update request {
 				User-Password := "%{Cleartext-Password}"
 			}
-			ldap
+			# Use PAP with decoded password
+			pap
 		}
 		else {
 			# No password found - this shouldn't happen in GTC flow
