@@ -157,7 +157,43 @@ authorize {
 	#  The ldap module reads passwords from the LDAP database.
 	#  For Google LDAP with PEAP-GTC: Uses LDAP bind authentication
 	#
-	ldap
+
+	# Extract domain from username for LDAP module selection
+	if (!&request:Tmp-String-0 && (&User-Name =~ /@(.*)$/)) {
+		update request {
+			Tmp-String-0 := "%{1}"
+		}
+	}
+
+	#  Try cache first to avoid repeated LDAP queries (performance optimization)
+	ldap_cache
+
+	#  If cache miss, query LDAP using domain-specific module
+	if (notfound) {
+		# Call LDAP module instance for the user's domain
+		# Each domain has its own LDAP module with correct base DN
+		if (&request:Tmp-String-0 == "krea.edu.in") {
+			ldap_krea_edu_in
+		}
+		elsif (&request:Tmp-String-0 == "krea.ac.in") {
+			ldap_krea_ac_in
+		}
+		elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
+			ldap_ifmr_ac_in
+		}
+		elsif (&request:Tmp-String-0 == "alumni.krea.edu.in") {
+			ldap_alumni_krea_edu_in
+		}
+		else {
+			# Fallback to default ldap module
+			ldap
+		}
+
+		#  Cache the result for future requests
+		if (ok || updated) {
+			ldap_cache
+		}
+	}
 
 	#
 	#  For Google LDAP: Hybrid authentication support
@@ -192,11 +228,11 @@ authorize {
 		}
 	}
 
-	#  If no EAP and we have User-Password, use PAP authentication with LDAP-returned password
-	#  (authenticate using mail ID only, regardless of OU status)
+	#  If no EAP and we have User-Password, use LDAP bind authentication
+	#  Google LDAP does NOT expose passwords, so we must use LDAP bind
 	if (User-Password && !(&reply:NT-Password || &control:NT-Password)) {
 		update control {
-			Auth-Type := pap
+			Auth-Type := ldap
 		}
 	}
 
@@ -401,25 +437,24 @@ authenticate {
 	#  password can be clear-text, or encrypted.
 	Auth-Type PAP {
 		# GTC sends password through EAP, setting it in User-Password or Cleartext-Password
-		# The password is typically encoded in Quoted-Printable format
+		# The password is typically encoded in Quoted-Printable format (Mac WiFi clients)
 		# Example: $ becomes =3D24, so SenthilNasa005$$$$$ becomes SenthilNasa005=3D24=3D24=3D24=3D24=3D24
 		#
-		# We need to:
-		# 1. Identify the password attribute GTC set
-		# 2. Decode it if necessary
-		# 3. Use it for LDAP bind (for active users) or accept (for suspended users)
-		
+		# Google LDAP does NOT expose userPassword, so we use LDAP bind authentication
+		# Steps:
+		# 1. Identify the password attribute GTC set (User-Password or Cleartext-Password)
+		# 2. Decode it if necessary (remove URL encoding)
+		# 3. Perform LDAP bind to authenticate
+
 		# Priority 1: Check User-Password first
 		if (&User-Password) {
 			# Debug: Log the password value to see what we're working with
-			# This will help us understand why the regex isn't matching
 			update control {
 				Tmp-String-9 := "%{User-Password}"
 			}
 
-			# User-Password is set by GTC, but it might be encoded
-			# Decode if it contains = character
-			# Note: We check the actual attribute value, not the expanded string
+			# Decode password if it contains = character (URL-encoded)
+			# Mac WiFi clients send passwords URL-encoded in GTC
 			if (User-Password =~ /=/) {
 				# Password is encoded, decode it using the decode script
 				update request {
@@ -428,14 +463,15 @@ authenticate {
 			}
 			else {
 				# Password doesn't contain =, might already be decoded or not encoded
-				# Force decode anyway to handle edge cases
+				# Force decode anyway to handle edge cases (backslash removal, etc.)
 				update request {
 					User-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{User-Password}}"
 				}
 			}
-			# Use PAP with decoded password to authenticate
-			# LDAP search in authorize returned the Cleartext-Password
-			pap
+
+			# Use LDAP bind to authenticate (Google LDAP doesn't expose passwords)
+			# This will bind to LDAP as the user to verify the password
+			ldap
 		}
 		# Priority 2: Check Cleartext-Password as fallback
 		elsif (&Cleartext-Password) {
@@ -446,17 +482,19 @@ authenticate {
 					Cleartext-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{Cleartext-Password}}"
 				}
 			}
-			# For PAP, we need User-Password not Cleartext-Password
+
+			# For LDAP bind, we need User-Password
 			update request {
 				User-Password := "%{Cleartext-Password}"
 			}
-			# Use PAP with decoded password
-			pap
+
+			# Use LDAP bind to authenticate
+			ldap
 		}
 		else {
 			# No password found - this shouldn't happen in GTC flow
 			# Return fail to trigger error handling
-			pap
+			reject
 		}
 	}
 
@@ -485,12 +523,47 @@ authenticate {
 #	pam
 
 	#
-	#  For Google LDAP: Use LDAP bind authentication
-	#  This is required for PEAP-EAP-GTC since Google LDAP
-	#  doesn't expose NT-Password hashes
+	#  LDAP bind authentication for Google LDAP
+	#  Google LDAP does NOT expose passwords, so we use LDAP bind to verify credentials
+	#  This is used for:
+	#  1. EAP-TTLS with PAP/GTC inner method
+	#  2. PEAP with GTC inner method
+	#  3. Direct PAP authentication (radtest)
 	#
 	Auth-Type LDAP {
-		ldap
+		# Decode password if it's URL-encoded (from GTC)
+		# GTC encodes special characters: $ becomes =3D24, etc.
+		if (&User-Password && (&User-Password =~ /=/)) {
+			update request {
+				User-Password := "%{exec:/bin/bash /etc/freeradius/decode-password.sh %{User-Password}}"
+			}
+		}
+
+		# Extract domain if not already set
+		if (!&request:Tmp-String-0 && (&User-Name =~ /@(.*)$/)) {
+			update request {
+				Tmp-String-0 := "%{1}"
+			}
+		}
+
+		# Perform LDAP bind authentication using domain-specific module
+		# This will bind to LDAP using the user's DN and password
+		if (&request:Tmp-String-0 == "krea.edu.in") {
+			ldap_krea_edu_in
+		}
+		elsif (&request:Tmp-String-0 == "krea.ac.in") {
+			ldap_krea_ac_in
+		}
+		elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
+			ldap_ifmr_ac_in
+		}
+		elsif (&request:Tmp-String-0 == "alumni.krea.edu.in") {
+			ldap_alumni_krea_edu_in
+		}
+		else {
+			# Fallback to default ldap module
+			ldap
+		}
 	}
 
 	#

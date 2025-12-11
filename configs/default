@@ -432,16 +432,20 @@ authorize {
 	# This section will be automatically replaced by init.sh based on DOMAIN_CONFIG environment variable
 	# DO NOT MANUALLY EDIT BETWEEN THESE MARKERS
 	# --- BEGIN DYNAMIC DOMAIN CONFIG ---
-	
+
 	# Multi-domain support with VLAN assignments (dynamically generated)
 	# This configuration is generated from DOMAIN_CONFIG environment variable
 	# Example: [{"domain":"staff.yourdomain.com","Type":"Staff","VLAN":"10"},{"domain":"students.yourdomain.com","Type":"Student","VLAN":"20"}]
-	
+
 	if (&request:Tmp-String-0) {
-		# Query LDAP for authentication
+		# Query LDAP to verify user exists and get user attributes
+		# Google LDAP does not expose passwords, so we'll use LDAP bind for auth
 		ldap
-		
+
+		# If LDAP search successful, user exists
 		if (ok || updated) {
+			# Set Auth-Type to LDAP for bind-based authentication
+			# This will authenticate against LDAP in the authenticate section
 			update control {
 				Auth-Type := ldap
 			}
@@ -818,6 +822,24 @@ post-auth {
 	#  This helps differentiate between successful logins and failures in reports
 	update control {
 		Error-Type := ""
+	}
+
+	#  CRITICAL FIX FOR EAP-TTLS/PEAP (WiFi Authentication):
+	#  Copy VLAN and other attributes from session-state to reply
+	#  for EAP tunneled requests (TTLS/PEAP)
+	#  This is required for WiFi clients (iPhone, Android, etc.) to receive VLAN assignment
+	#
+	#  The inner tunnel sets VLAN in session-state and outer.session-state
+	#  But FreeRADIUS only sends reply attributes to the client, not session-state
+	#  So we must copy session-state VLAN to reply for EAP tunneled auth
+	if (&session-state:TLS-Session-Cipher-Suite) {
+		#  This is an EAP-TTLS or PEAP tunneled request
+		#  Copy VLAN attributes from session-state to reply
+		update reply {
+			Tunnel-Type += &session-state:Tunnel-Type
+			Tunnel-Medium-Type += &session-state:Tunnel-Medium-Type
+			Tunnel-Private-Group-Id += &session-state:Tunnel-Private-Group-Id
+		}
 	}
 
 	#  Log successful authentications to SQL

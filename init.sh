@@ -35,6 +35,57 @@ sed -i "s|LDAP_PASSWORD_PLACEHOLDER|${LDAP_PASSWORD}|g" /etc/freeradius/mods-ava
 sed -i "s|GOOGLE_LDAPTLS_CERT|$GOOGLE_LDAPTLS_CERT|g" /etc/freeradius/mods-available/ldap
 sed -i "s|GOOGLE_LDAPTLS_KEY|$GOOGLE_LDAPTLS_KEY|g" /etc/freeradius/mods-available/ldap
 
+# =================================================================================
+# Create LDAP module instances for each domain
+# =================================================================================
+# Google LDAP organizes users in separate directory trees per domain
+# We need separate LDAP module instances with different base DNs for each domain
+echo "Creating LDAP module instances for multi-domain support..."
+
+# Function to convert domain to base DN
+domain_to_base_dn() {
+    local domain="$1"
+    # alumni.krea.edu.in -> dc=alumni,dc=krea,dc=edu,dc=in
+    # krea.edu.in -> dc=krea,dc=edu,dc=in
+    # krea.ac.in -> dc=krea,dc=ac,dc=in
+    # ifmr.ac.in -> dc=ifmr,dc=ac,dc=in
+    echo "$domain" | sed 's/\./,dc=/g' | sed 's/^/dc=/'
+}
+
+# Parse DOMAIN_CONFIG and create an LDAP instance for each unique domain
+if [ -n "$DOMAIN_CONFIG" ]; then
+    # Extract unique domains from DOMAIN_CONFIG
+    domains=$(echo "$DOMAIN_CONFIG" | grep -o '"domain":"[^"]*"' | sed 's/"domain":"\([^"]*\)"/\1/' | sort -u)
+
+    echo "Found domains: $domains"
+
+    for domain in $domains; do
+        # Convert domain name to a safe module name (replace dots with underscores)
+        module_name="ldap_$(echo "$domain" | sed 's/\./_/g')"
+        base_dn=$(domain_to_base_dn "$domain")
+
+        echo "Creating LDAP module instance: $module_name for domain $domain with base DN: $base_dn"
+
+        # Copy the main LDAP module config and modify the base_dn
+        cp /etc/freeradius/mods-available/ldap "/etc/freeradius/mods-available/$module_name"
+
+        # IMPORTANT: Keep the module type as "ldap" (don't rename it)
+        # FreeRADIUS looks for rlm_ldap.so, not rlm_ldap_<instance>.so
+        # The instance name comes from the config filename and the section header
+        # Change: ldap { ... } to: ldap module_name { ... }
+        sed -i "s/^ldap {/ldap ${module_name} {/" "/etc/freeradius/mods-available/$module_name"
+
+        # Update the base_dn for this domain
+        sed -i "s|base_dn = 'dc=krea,dc=edu,dc=in'|base_dn = '$base_dn'|" "/etc/freeradius/mods-available/$module_name"
+        sed -i "s|base_dn = 'dc=BASE_DOMAIN,dc=DOMAIN_EXTENSION'|base_dn = '$base_dn'|" "/etc/freeradius/mods-available/$module_name"
+
+        # Enable the module
+        ln -sf "/etc/freeradius/mods-available/$module_name" "/etc/freeradius/mods-enabled/$module_name"
+
+        echo "Created and enabled LDAP module: $module_name"
+    done
+fi
+
 # Update SQL configuration with database environment variables
 sed -i "s|\${ENV_DB_HOST}|${DB_HOST:-mysql}|g" /etc/freeradius/mods-available/sql
 sed -i "s|\${ENV_DB_PORT}|${DB_PORT:-3306}|g" /etc/freeradius/mods-available/sql
@@ -270,24 +321,43 @@ UNLANG
             # Insert dynamic VLAN configuration into default site config
             # This replaces the hardcoded domain checks with dynamic ones
             cat > /tmp/authorize_section.conf << 'EOF'
-	
+
 	# Multi-domain support with dynamic VLAN assignments
 	# Configuration loaded from DOMAIN_CONFIG environment variable
 	# All domains use same LDAP connection (same Google Workspace)
-	
+
 	if (&request:Tmp-String-0) {
 		# Query LDAP to verify user exists and password is valid
-		# LDAP performs search to find user and return password attributes
-		ldap
-		
+		# Google LDAP organizes users in separate directory trees by domain
+		# We call the domain-specific LDAP module instance based on Tmp-String-0 (domain)
+
+		# Call LDAP module instance for the user's domain
+		# Module names: ldap_krea_edu_in, ldap_krea_ac_in, ldap_ifmr_ac_in, ldap_alumni_krea_edu_in
+		if (&request:Tmp-String-0 == "krea.edu.in") {
+			ldap_krea_edu_in
+		}
+		elsif (&request:Tmp-String-0 == "krea.ac.in") {
+			ldap_krea_ac_in
+		}
+		elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
+			ldap_ifmr_ac_in
+		}
+		elsif (&request:Tmp-String-0 == "alumni.krea.edu.in") {
+			ldap_alumni_krea_edu_in
+		}
+		else {
+			# Fallback to default ldap module
+			ldap
+		}
+
 		# If LDAP search successful, user exists in LDAP
 		if (ok || updated) {
-			# User exists in LDAP and password attributes have been returned
-			# Let PAP module authenticate using the password from LDAP
+			# User exists in LDAP - set Auth-Type to LDAP for bind authentication
+			# This will use LDAP bind to verify the password (Google LDAP doesn't expose passwords)
 			update control {
-				Auth-Type := pap
+				Auth-Type := ldap
 			}
-			
+
 			# Dynamic VLAN assignment based on domain
 EOF
             cat /tmp/dynamic_vlan.conf >> /tmp/authorize_section.conf

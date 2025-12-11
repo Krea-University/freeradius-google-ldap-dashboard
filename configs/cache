@@ -12,11 +12,13 @@ cache ldap_cache {
 	driver = "rlm_cache_rbtree"
 
 	#  Key to use for the cache entries
-	#  We cache based on username
+	#  Cache based on username to retrieve user attributes without password
+	#  This avoids repeated LDAP searches for the same user
 	key = "%{User-Name}"
 
 	#  Time-to-live for cache entries (seconds)
 	#  Set from environment variable CACHE_TIMEOUT (default 300 = 5 minutes)
+	#  Industry best practice: 5-15 minutes for LDAP attribute caching
 	ttl = ENV_CACHE_TTL
 
 	#  Maximum number of entries in the cache
@@ -32,16 +34,20 @@ cache ldap_cache {
 	add_stats = no
 
 	#  The update section defines what gets cached
+	#  These attributes are restored on cache hit, avoiding LDAP query
 	update {
 		#  Cache the LDAP User-DN for quick lookups
 		&control:LDAP-UserDn := &control:LDAP-UserDn
-		
+
+		#  Cache the cleartext password from LDAP for PAP authentication
+		&control:Cleartext-Password := &control:Cleartext-Password
+
 		#  Cache authentication type
 		&control:Auth-Type := &control:Auth-Type
-		
+
 		#  Cache user type (Staff/Student/Other)
 		&control:Tmp-String-1 := &control:Tmp-String-1
-		
+
 		#  Cache VLAN assignment
 		&reply:Tunnel-Type := &reply:Tunnel-Type
 		&reply:Tunnel-Medium-Type := &reply:Tunnel-Medium-Type
