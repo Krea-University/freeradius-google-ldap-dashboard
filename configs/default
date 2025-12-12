@@ -591,22 +591,8 @@ authenticate {
 	Auth-Type LDAP {
 		#  Domain-based LDAP authentication
 		#  Call the appropriate LDAP module based on domain extracted from User-Name
-		if (&request:Tmp-String-0 == "krea.edu.in") {
-			ldap_krea_edu_in
-		}
-		elsif (&request:Tmp-String-0 == "krea.ac.in") {
-			ldap_krea_ac_in
-		}
-		elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
-			ldap_ifmr_ac_in
-		}
-		elsif (&request:Tmp-String-0 == "alumni.krea.edu.in") {
-			ldap_alumni_krea_edu_in
-		}
-		else {
-			#  Fallback to default ldap module for unknown domains
-			ldap
-		}
+		#  This section is dynamically generated from DOMAIN_CONFIG environment variable
+		# --- DYNAMIC LDAP CALLS PLACEHOLDER ---
 	}
 
 	#

@@ -183,22 +183,8 @@ authorize {
 	if (notfound) {
 		# Call LDAP module instance for the user's domain
 		# Each domain has its own LDAP module with correct base DN
-		if (&request:Tmp-String-0 == "krea.edu.in") {
-			ldap_krea_edu_in
-		}
-		elsif (&request:Tmp-String-0 == "krea.ac.in") {
-			ldap_krea_ac_in
-		}
-		elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
-			ldap_ifmr_ac_in
-		}
-		elsif (&request:Tmp-String-0 == "alumni.krea.edu.in") {
-			ldap_alumni_krea_edu_in
-		}
-		else {
-			# Fallback to default ldap module
-			ldap
-		}
+		# This section is dynamically generated from DOMAIN_CONFIG environment variable
+		# --- DYNAMIC LDAP AUTHORIZE PLACEHOLDER ---
 
 		#  Cache the result for future requests
 		if (ok || updated) {
@@ -559,22 +545,8 @@ authenticate {
 
 		# Perform LDAP bind authentication using domain-specific module
 		# This will bind to LDAP using the user's DN and password
-		if (&request:Tmp-String-0 == "krea.edu.in") {
-			ldap_krea_edu_in
-		}
-		elsif (&request:Tmp-String-0 == "krea.ac.in") {
-			ldap_krea_ac_in
-		}
-		elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
-			ldap_ifmr_ac_in
-		}
-		elsif (&request:Tmp-String-0 == "alumni.krea.edu.in") {
-			ldap_alumni_krea_edu_in
-		}
-		else {
-			# Fallback to default ldap module
-			ldap
-		}
+		# This section is dynamically generated from DOMAIN_CONFIG environment variable
+		# --- DYNAMIC LDAP AUTH PLACEHOLDER ---
 	}
 
 	#

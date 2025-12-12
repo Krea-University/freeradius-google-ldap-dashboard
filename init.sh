@@ -84,6 +84,61 @@ if [ -n "$DOMAIN_CONFIG" ]; then
 
         echo "Created and enabled LDAP module: $module_name"
     done
+    
+    # =================================================================================
+    # Generate dynamic LDAP calling code for configs
+    # =================================================================================
+    echo "Generating dynamic LDAP calling configuration..."
+    
+    # Generate the dynamic LDAP module selection code
+    first_domain=true
+    
+    # Create the ldap_call_code.conf file directly with proper formatting
+    > /tmp/ldap_call_code.conf
+    
+    for domain in $domains; do
+        module_name="ldap_$(echo "$domain" | sed 's/\./_/g')"
+        
+        if [ "$first_domain" = true ]; then
+            echo "		if (&request:Tmp-String-0 == \"$domain\") {" >> /tmp/ldap_call_code.conf
+            echo "			$module_name" >> /tmp/ldap_call_code.conf
+            echo "		}" >> /tmp/ldap_call_code.conf
+            first_domain=false
+        else
+            echo "		elsif (&request:Tmp-String-0 == \"$domain\") {" >> /tmp/ldap_call_code.conf
+            echo "			$module_name" >> /tmp/ldap_call_code.conf
+            echo "		}" >> /tmp/ldap_call_code.conf
+        fi
+    done
+    
+    # Add fallback to default ldap module
+    echo "		else {" >> /tmp/ldap_call_code.conf
+    echo "			# Fallback to default ldap module" >> /tmp/ldap_call_code.conf
+    echo "			ldap" >> /tmp/ldap_call_code.conf
+    echo "		}" >> /tmp/ldap_call_code.conf
+    
+    echo "Generated LDAP calling code for $(echo "$domains" | wc -w) domains"
+    
+    # Replace placeholder in default config (Auth-Type LDAP section)
+    if grep -q "# --- DYNAMIC LDAP CALLS PLACEHOLDER ---" /etc/freeradius/sites-available/default; then
+        echo "Replacing LDAP calls placeholder in default config..."
+        sed -i "/# --- DYNAMIC LDAP CALLS PLACEHOLDER ---/r /tmp/ldap_call_code.conf" /etc/freeradius/sites-available/default
+        sed -i "/# --- DYNAMIC LDAP CALLS PLACEHOLDER ---/d" /etc/freeradius/sites-available/default
+    fi
+    
+    # Replace placeholder in inner-tunnel config (authorize section)
+    if grep -q "# --- DYNAMIC LDAP AUTHORIZE PLACEHOLDER ---" /etc/freeradius/sites-available/inner-tunnel; then
+        echo "Replacing LDAP authorize placeholder in inner-tunnel config..."
+        sed -i "/# --- DYNAMIC LDAP AUTHORIZE PLACEHOLDER ---/r /tmp/ldap_call_code.conf" /etc/freeradius/sites-available/inner-tunnel
+        sed -i "/# --- DYNAMIC LDAP AUTHORIZE PLACEHOLDER ---/d" /etc/freeradius/sites-available/inner-tunnel
+    fi
+    
+    # Replace placeholder in inner-tunnel config (authenticate section)
+    if grep -q "# --- DYNAMIC LDAP AUTH PLACEHOLDER ---" /etc/freeradius/sites-available/inner-tunnel; then
+        echo "Replacing LDAP auth placeholder in inner-tunnel config..."
+        sed -i "/# --- DYNAMIC LDAP AUTH PLACEHOLDER ---/r /tmp/ldap_call_code.conf" /etc/freeradius/sites-available/inner-tunnel
+        sed -i "/# --- DYNAMIC LDAP AUTH PLACEHOLDER ---/d" /etc/freeradius/sites-available/inner-tunnel
+    fi
 fi
 
 # Update SQL configuration with database environment variables
@@ -321,7 +376,32 @@ UNLANG
         if [ $? -eq 0 ]; then
             # Insert dynamic VLAN configuration into default site config
             # This replaces the hardcoded domain checks with dynamic ones
-            cat > /tmp/authorize_section.conf << 'EOF'
+            
+            # First, generate the LDAP module calls dynamically from domains
+            domains=$(echo "$DOMAIN_CONFIG" | grep -o '"domain":"[^"]*"' | sed 's/"domain":"\([^"]*\)"/\1/' | sort -u)
+            ldap_calls=""
+            first_ldap=true
+            for domain in $domains; do
+                module_name="ldap_$(echo "$domain" | sed 's/\./_/g')"
+                if [ "$first_ldap" = true ]; then
+                    ldap_calls="if (&request:Tmp-String-0 == \"$domain\") {
+			$module_name
+		}"
+                    first_ldap=false
+                else
+                    ldap_calls="$ldap_calls
+		elsif (&request:Tmp-String-0 == \"$domain\") {
+			$module_name
+		}"
+                fi
+            done
+            ldap_calls="$ldap_calls
+		else {
+			# Fallback to default ldap module
+			ldap
+		}"
+            
+            cat > /tmp/authorize_section.conf << EOFCONFIG
 
 	# Multi-domain support with dynamic VLAN assignments
 	# Configuration loaded from DOMAIN_CONFIG environment variable
@@ -332,24 +412,8 @@ UNLANG
 		# Google LDAP organizes users in separate directory trees by domain
 		# We call the domain-specific LDAP module instance based on Tmp-String-0 (domain)
 
-		# Call LDAP module instance for the user's domain
-		# Module names: ldap_krea_edu_in, ldap_krea_ac_in, ldap_ifmr_ac_in, ldap_alumni_krea_edu_in
-		if (&request:Tmp-String-0 == "krea.edu.in") {
-			ldap_krea_edu_in
-		}
-		elsif (&request:Tmp-String-0 == "krea.ac.in") {
-			ldap_krea_ac_in
-		}
-		elsif (&request:Tmp-String-0 == "ifmr.ac.in") {
-			ldap_ifmr_ac_in
-		}
-		elsif (&request:Tmp-String-0 == "alumni.krea.edu.in") {
-			ldap_alumni_krea_edu_in
-		}
-		else {
-			# Fallback to default ldap module
-			ldap
-		}
+		# Call LDAP module instance for the user's domain (dynamically generated)
+		$ldap_calls
 
 		# If LDAP search successful, user exists in LDAP
 		if (ok || updated) {
@@ -360,7 +424,7 @@ UNLANG
 			}
 
 			# Dynamic VLAN assignment based on domain
-EOF
+EOFCONFIG
             cat /tmp/dynamic_vlan.conf >> /tmp/authorize_section.conf
             cat >> /tmp/authorize_section.conf << 'EOF'
 			else {
