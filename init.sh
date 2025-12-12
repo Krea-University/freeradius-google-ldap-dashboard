@@ -248,7 +248,7 @@ LDAP_ROUTE
         # Generate case statement for ldap-auth.sh
         CASE_ENTRIES=""
         for domain in $UNIQUE_DOMAINS; do
-            # Convert domain to base_dn: krea.ac.in -> dc=krea,dc=ac,dc=in
+            # Convert domain to base_dn: example.com -> dc=example,dc=com
             BASE_DN=$(echo "$domain" | sed 's/\./,dc=/g; s/^/dc=/')
             CASE_ENTRIES="${CASE_ENTRIES}    \"$domain\")
         BASE_DN=\"$BASE_DN\"
