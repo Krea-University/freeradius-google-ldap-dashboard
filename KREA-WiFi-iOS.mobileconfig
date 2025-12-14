@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <!-- CA Certificate -->
+        <dict>
+            <key>PayloadCertificateFileName</key>
+            <string>ca.pem</string>
+            <key>PayloadContent</key>
+            <data>
+            LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUU==
+            </data>
+            <key>PayloadDescription</key>
+            <string>KREA University Certificate Authority</string>
+            <key>PayloadDisplayName</key>
+            <string>KREA CA Certificate</string>
+            <key>PayloadIdentifier</key>
+            <string>in.edu.krea.ca-cert</string>
+            <key>PayloadType</key>
+            <string>com.apple.security.root</string>
+            <key>PayloadUUID</key>
+            <string>CA-CERT-UUID-001</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+        </dict>
+        <!-- WiFi Configuration -->
+        <dict>
+            <key>AutoJoin</key>
+            <true/>
+            <key>EAPClientConfiguration</key>
+            <dict>
+                <key>AcceptEAPTypes</key>
+                <array>
+                    <integer>21</integer> <!-- EAP-TTLS -->
+                </array>
+                <key>EAPFASTUsePAC</key>
+                <false/>
+                <key>OneTimeUserPassword</key>
+                <false/>
+                <key>OuterIdentity</key>
+                <string>anonymous@krea.edu.in</string>
+                <key>PayloadCertificateAnchorUUID</key>
+                <array>
+                    <string>CA-CERT-UUID-001</string>
+                </array>
+                <key>TLSTrustedServerNames</key>
+                <array>
+                    <string>radius.krea.edu.in</string>
+                </array>
+                <key>TTLSInnerAuthentication</key>
+                <string>PAP</string>
+                <key>UserName</key>
+                <string>USERNAME@krea.edu.in</string>
+                <key>UserPassword</key>
+                <string>PASSWORD</string>
+            </dict>
+            <key>EncryptionType</key>
+            <string>WPA2</string>
+            <key>HIDDEN_NETWORK</key>
+            <false/>
+            <key>IsHotspot</key>
+            <false/>
+            <key>PayloadDescription</key>
+            <string>Configures WiFi settings for KREA-SECURE</string>
+            <key>PayloadDisplayName</key>
+            <string>KREA-SECURE WiFi</string>
+            <key>PayloadIdentifier</key>
+            <string>in.edu.krea.wifi</string>
+            <key>PayloadType</key>
+            <string>com.apple.wifi.managed</string>
+            <key>PayloadUUID</key>
+            <string>WIFI-UUID-002</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>ProxyType</key>
+            <string>None</string>
+            <key>SSID_STR</key>
+            <string>KREA-SECURE</string>
+        </dict>
+    </array>
+    <key>PayloadDescription</key>
+    <string>KREA University WiFi Configuration Profile</string>
+    <key>PayloadDisplayName</key>
+    <string>KREA WiFi Profile</string>
+    <key>PayloadIdentifier</key>
+    <string>in.edu.krea.profile</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>PROFILE-UUID-MAIN</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+</dict>
+</plist>
